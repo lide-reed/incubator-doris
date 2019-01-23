@@ -175,18 +175,6 @@ public:
         return static_cast<int64_t>(_value % MULTIPLIER);
     }
 
-    bool equal(const DecimalValue& other) const {
-        return _value == other.value();
-    }
-
-    bool bigger(const DecimalValue& other) const {
-        return _value > other.value();
-    }
-
-    bool smaller(const DecimalValue& other) const {
-        return _value < other.value();
-    }
-
     bool operator==(const DecimalValue& other) const {
         return _value == other.value();
     }
