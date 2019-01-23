@@ -1294,7 +1294,6 @@ private:
 };
 
 // multi distinct state for decimal
-// serialize order type:int_len:frac_len:sign:int_len ... 
 class MultiDistinctDecimalState {
 public:
 
@@ -1318,24 +1317,16 @@ public:
     // type:one byte  value:sizeof(T)
     StringVal serialize(FunctionContext* ctx) {
         const int serialized_set_length = sizeof(uint8_t) 
-                   + (DECIMAL_INT_LEN_BYTE_SIZE 
-                     + DECIMAL_FRAC_BYTE_SIZE
-                     + DECIMAL_SIGN_BYTE_SIZE
-                     + DECIMAL_BUFFER_BYTE_SIZE) * _set.size();
+                   + DECIMAL_BYTE_SIZE * _set.size();
         StringVal result(ctx, serialized_set_length);
         uint8_t* writer = result.ptr;
         *writer = (uint8_t)_type;
         writer++;
         // for int_length and frac_length, uint8_t will not overflow.
         for (auto& value : _set) {
-            *writer = value._int_length;
-            writer += DECIMAL_INT_LEN_BYTE_SIZE;
-            *writer = value._frac_length;
-            writer += DECIMAL_FRAC_BYTE_SIZE;
-            *writer = value._sign;
-            writer += DECIMAL_SIGN_BYTE_SIZE;
-            memcpy(writer, value._buffer, DECIMAL_BUFFER_BYTE_SIZE);
-            writer += DECIMAL_BUFFER_BYTE_SIZE;
+            __int128 v = value.value();
+            memcpy(writer, &v, DECIMAL_BYTE_SIZE);
+            writer += DECIMAL_BYTE_SIZE;
         }    
         return result;
     }    
@@ -1349,15 +1340,10 @@ public:
         // value
         while (reader < end) {
             DecimalValue value;
-            value._int_length = *reader;
-            reader += DECIMAL_INT_LEN_BYTE_SIZE;
-            value._frac_length = *reader;
-            reader += DECIMAL_FRAC_BYTE_SIZE;
-            value._sign = *reader;
-            reader += DECIMAL_SIGN_BYTE_SIZE;
-            value._buffer_length = DECIMAL_BUFF_LENGTH;
-            memcpy(value._buffer, reader, DECIMAL_BUFFER_BYTE_SIZE);
-            reader += DECIMAL_BUFFER_BYTE_SIZE;
+            __int128 v = 0;
+            memcpy(&v, reader, DECIMAL_BYTE_SIZE);
+            value.set_value(v);
+            reader += DECIMAL_BYTE_SIZE;
             _set.insert(value);
         }    
     }    
@@ -1387,12 +1373,7 @@ public:
     }
 
 private:
-
-    const int DECIMAL_INT_LEN_BYTE_SIZE = 1; 
-    const int DECIMAL_FRAC_BYTE_SIZE = 1; 
-    const int DECIMAL_SIGN_BYTE_SIZE = 1; 
-    const int DECIMAL_BUFFER_BYTE_SIZE = 36;
-
+    const int DECIMAL_BYTE_SIZE = 16;
     std::unordered_set<DecimalValue> _set;
     FunctionContext::Type _type;
 };

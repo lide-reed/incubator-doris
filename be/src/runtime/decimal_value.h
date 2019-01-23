@@ -30,43 +30,8 @@
 #include "common/logging.h"
 #include "udf/udf.h"
 #include "util/hash_util.hpp"
-#include "gutil/strings/numbers.h"
-#include "util/mysql_global.h"
 
 namespace doris {
-
-// The number of digits per "big digits"
-static const int32_t DIG_PER_DEC1 = 9;
-// Maximum length of buffer, whose item is our "big digits" (uint32),
-static const int32_t DECIMAL_BUFF_LENGTH = 9;
-// The maximum number of digits that my_decimal can possibly contain
-static const int32_t DECIMAL_MAX_POSSIBLE_PRECISION = DECIMAL_BUFF_LENGTH * 9;
-
-// Maximum guaranteed precision of number in decimal digits (number of our
-// digits * number of decimal digits in one our big digit - number of decimal
-// digits in one our big digit decreased by 1 (because we always put decimal
-// point on the border of our big digits))
-static const int32_t DECIMAL_MAX_PRECISION = DECIMAL_MAX_POSSIBLE_PRECISION - 8 * 2;
-static const int32_t DECIMAL_MAX_SCALE = 30;
-// NOT_FIXED_DEC is defined in mysql_com.h
-#ifndef NOT_FIXED_DEC
-static const int32_t NOT_FIXED_DEC = 31;
-#endif
-// maximum length of string representation (number of maximum decimal
-// digits + 1 position for sign + 1 position for decimal point, no terminator)
-static const int32_t DECIMAL_MAX_STR_LENGTH = (DECIMAL_MAX_POSSIBLE_PRECISION + 2);
-
-static const int32_t DIG_MASK = 100000000; // 10^8
-static const int32_t DIG_BASE = 1000000000; // 10^9
-static const int32_t DIG_MAX = DIG_BASE - 1;
-
-static const int32_t powers10[DIG_PER_DEC1 + 1] =
-        { 1, 10, 100, 1000, 10000,
-        100000, 1000000, 10000000, 100000000, 1000000000};
-static const int32_t frac_max[DIG_PER_DEC1 - 1] =
-        { 900000000, 990000000, 999000000,
-        999900000, 999990000, 999999000,
-        999999900, 999999990 };
 
 // TODO(lingbin): add to mysql result if we support "show warning" in our mysql protocol?
 enum DecimalError {
@@ -89,94 +54,62 @@ enum DecimalRoundMode {
     TRUNCATE = 5
 };
 
-// Type T should be an integer: int8_t, int16_t...
-template<typename T> inline T round_up(T length);
-
-// Internally decimal numbers are stored base 10^9 (see DIG_BASE)
-// So one variable of type big_digit_type is limited:
-//      0 < decimal_digit <= DIG_MAX < DIG_BASE
 class DecimalValue {
 public:
     friend DecimalValue operator+(const DecimalValue& v1, const DecimalValue& v2);
     friend DecimalValue operator-(const DecimalValue& v1, const DecimalValue& v2);
     friend DecimalValue operator*(const DecimalValue& v1, const DecimalValue& v2);
     friend DecimalValue operator/(const DecimalValue& v1, const DecimalValue& v2);
-    friend int32_t do_add(
-            const DecimalValue& value1,
-            const DecimalValue& value2,
-            DecimalValue* to);
-    friend int32_t do_sub(
-            const DecimalValue& value1,
-            const DecimalValue& value2,
-            DecimalValue* to);
-    friend int do_mul(
-            const DecimalValue& value1,
-            const DecimalValue& value2,
-            DecimalValue* to);
-    friend int do_div_mod(
-            const DecimalValue& value1,
-            const DecimalValue& value2,
-            DecimalValue* to,
-            DecimalValue* mod);
     friend std::istream& operator>>(std::istream& ism, DecimalValue& decimal_value);
-
     friend DecimalValue operator-(const DecimalValue& v);
 
-    DecimalValue() : _buffer_length(DECIMAL_BUFF_LENGTH){
-        set_to_zero();
-    }
+    static const int32_t PRECISION = 27;
+    static const int32_t SCALE = 9;
+    static const int32_t MULTIPLIER = 1000000000;
+    static const int64_t MAX_INT_VALUE = 999999999999999999;
+    static const int32_t MAX_FRAC_VALUE = 999999999;
 
-    DecimalValue(const std::string& decimal_str) : _buffer_length(DECIMAL_BUFF_LENGTH) {
+    static const __int128 MAX_DECIMAL_VALUE = 
+        static_cast<__int128>(MAX_INT_VALUE) * MULTIPLIER + MAX_FRAC_VALUE;
+
+    DecimalValue() : _value(0){}
+    const __int128& value() const { return _value; }
+
+    DecimalValue(const std::string& decimal_str) {
         parse_from_str(decimal_str.c_str(), decimal_str.size());
     }
 
     // Construct from olap engine
-    // Note: the base is 10^9 for parameter frac_value, which means the max length of fraction part
-    // is 9, and the parameter frac_value need to be divided by 10^9.
-    DecimalValue(int64_t int_value, int64_t frac_value) : _buffer_length(DECIMAL_BUFF_LENGTH) {
-        set_to_zero();
-        if (int_value < 0 || frac_value < 0) {
-            _sign = true;
-        } else {
-            _sign = false;
+    DecimalValue(int64_t int_value, int64_t frac_value) {
+        bool is_negtive = (int_value < 0 || frac_value < 0);
+        if (is_negtive) {
+            int_value = std::abs(int_value);
+            frac_value = std::abs(frac_value);
+        } 
+
+        if (frac_value > MAX_FRAC_VALUE) {
+            frac_value = MAX_FRAC_VALUE;
         }
 
-        int32_t big_digit_length = copy_int_to_decimal_int(
-                std::abs(int_value),
-                _buffer);
-        _int_length = big_digit_length * DIG_PER_DEC1;
-        _frac_length = copy_int_to_decimal_frac(
-                std::abs(frac_value),
-                _buffer + big_digit_length);
+        _value = static_cast<__int128>(int_value) * MULTIPLIER + frac_value;
+       if (is_negtive) _value = -_value;
     }
 
-    DecimalValue(int64_t int_value) : _buffer_length(DECIMAL_BUFF_LENGTH){
-        set_to_zero();
-        _sign = int_value < 0 ? true : false;
+    DecimalValue(int64_t int_value) {
+        _value = static_cast<__int128>(int_value) * MULTIPLIER;
+    }
 
-        int32_t big_digit_length = copy_int_to_decimal_int(
-                std::abs(int_value),
-                _buffer);
-        _int_length = big_digit_length * DIG_PER_DEC1;
-        _frac_length = 0;
+    void set_value(__int128 value) {
+        _value = value;
     }
 
     DecimalValue& assign_from_float(const float float_value) {
-        // buffer is short, sign and '\0' is the 2.
-        char buffer[MAX_FLOAT_STR_LENGTH + 2];
-        buffer[0] = '\0';
-        int length = FloatToBuffer(float_value, MAX_FLOAT_STR_LENGTH, buffer);
-        DCHECK(length >= 0) << "gcvt float failed, float value=" << float_value;
-        parse_from_str(buffer, length);
+        _value = static_cast<__int128>(float_value * MULTIPLIER);
         return *this;
     }
 
     DecimalValue& assign_from_double(const double double_value) {
-        char buffer[MAX_DOUBLE_STR_LENGTH + 2];
-        buffer[0] = '\0';
-        int length = DoubleToBuffer(double_value, MAX_DOUBLE_STR_LENGTH, buffer);
-        DCHECK(length >= 0) << "gcvt double failed, double value=" << double_value;
-        parse_from_str(buffer, length);
+        _value = static_cast<__int128>(double_value * MULTIPLIER);
         return *this;
     }
 
@@ -185,21 +118,7 @@ public:
     // Discard the scale part
     // ATTN: invoker must make sure no OVERFLOW
     operator int64_t() const {
-        const int32_t* buff = _buffer;
-        int64_t result = 0;
-
-        int32_t int_length = _int_length;
-        for (int32_t i = 0; int_length > 0; ++i) {
-            result = (result * DIG_BASE) + *(buff + i);
-            int_length -= DIG_PER_DEC1;
-        }
-
-        // negative
-        if (_sign) {
-            result = -result;
-        }
-
-        return result;
+        return static_cast<int64_t>(_value / MULTIPLIER);
     }
 
     // These cast functions are needed in "functions.cc", which is generated by python script.
@@ -207,25 +126,11 @@ public:
     // Discard the scale part
     // ATTN: invoker must make sure no OVERFLOW
     operator __int128() const {
-        const int32_t* buff = _buffer;
-        __int128 result = 0;
-
-        int32_t int_length = _int_length;
-        for (int32_t i = 0; int_length > 0; ++i) {
-            result = (result * DIG_BASE) + *(buff + i);
-            int_length -= DIG_PER_DEC1;
-        }
-
-        // negative
-        if (_sign) {
-            result = -result;
-        }
-
-        return result;
+        return static_cast<__int128>(_value / MULTIPLIER);
     }
 
     operator bool() const {
-        return !is_zero();
+        return _value != 0;
     }
 
     operator int8_t() const {
@@ -267,58 +172,52 @@ public:
     // ATTN: the max length of fraction part in OLAP is 9, so the 'big digits' except the first one
     // will be truncated.
     int32_t frac_value() const {
-        const int32_t intg = round_up(_int_length);
-        const int32_t frac = round_up(_frac_length);
-        const int32_t* frac_begin = _buffer + intg;
-        int32_t frac_val = (frac != 0) ? *frac_begin : 0;
-        frac_val = (_sign == true) ? -frac_val : frac_val;
-        return frac_val;
+        return static_cast<int64_t>(_value % MULTIPLIER);
     }
 
     bool equal(const DecimalValue& other) const {
-        return (*this - other).is_zero();
+        return _value == other.value();
     }
 
     bool bigger(const DecimalValue& other) const {
-        return (other - *this)._sign;
+        return _value > other.value();
     }
 
     bool smaller(const DecimalValue& other) const {
-        return (*this - other)._sign;
+        return _value < other.value();
     }
 
     bool operator==(const DecimalValue& other) const {
-        return equal(other);
+        return _value == other.value();
     }
 
     bool operator!=(const DecimalValue& other) const {
-        return !equal(other);
+        return _value != other.value();
     }
 
     bool operator<=(const DecimalValue& other) const {
-        return !bigger(other);
+        return _value <= other.value();
     }
 
     bool operator>=(const DecimalValue& other) const {
-        return !smaller(other);
+        return _value >= other.value();
     }
 
     bool operator<(const DecimalValue& other) const {
-        return smaller(other);
+        return _value < other.value();
     }
 
     bool operator>(const DecimalValue& other) const {
-        return bigger(other);
+        return _value > other.value();
     }
 
     // change to maximum value for given precision and scale
     // precision/scale - see decimal_bin_size() below
     // to              - decimal where where the result will be stored
-    //                  to->buf and to->len must be set.
     void to_max_decimal(int precision, int frac);
     void to_min_decimal(int precision, int frac) {
         to_max_decimal(precision, frac);
-        _sign = -1;
+        if (_value > 0) _value = -_value;
     }
 
     // The maximum of fraction part is "scale".
@@ -342,156 +241,105 @@ public:
     int parse_from_str(const char* decimal_str, int32_t length);
 
     std::string get_debug_info() const {
-        std::stringstream ss;
-        ss << "_int_length: " << _int_length << "; "
-            << "_frac_length: " << _frac_length << "; "
-            << "_sign: " << _sign << "; "
-            << "_buffer_length: " << _buffer_length << "; ";
-        ss << "_buffer: [";
-        for (int i = 0; i < DIG_PER_DEC1; ++i) {
-            ss << _buffer[i] << ", ";
-        }
-        ss << "]; ";
-        return ss.str();
+        return to_string();
     }
 
     static DecimalValue get_min_decimal() {
-        DecimalValue value;
-        value._sign = true;
-        value._int_length = DECIMAL_MAX_POSSIBLE_PRECISION;
-        value._frac_length = 0;
-        for (int i = 0; i < DIG_PER_DEC1; ++i) {
-            value._buffer[i] = DIG_BASE - 1;
-        }
-        return value;
+        return DecimalValue(-MAX_INT_VALUE, MAX_FRAC_VALUE);
     }
 
     static DecimalValue get_max_decimal() {
-        DecimalValue value;
-        value._sign = false;
-        value._int_length = DECIMAL_MAX_POSSIBLE_PRECISION;
-        value._frac_length = 0;
-        for (int i = 0; i < DIG_PER_DEC1; ++i) {
-            value._buffer[i] = DIG_BASE - 1;
-        }
-        return value;
+        return DecimalValue(MAX_INT_VALUE, MAX_FRAC_VALUE);
     }
 
-    static DecimalValue from_decimal_val(const doris_udf::DecimalVal& val) {
-        DecimalValue result;
-        result._int_length = val.int_len;
-        result._frac_length = val.frac_len;
-        result._sign = val.sign;
-
-        result._buffer_length = DECIMAL_BUFF_LENGTH;
-        memcpy(result._buffer, val.buffer, sizeof(int32_t) * DECIMAL_BUFF_LENGTH);
-        return result;
+    static DecimalValue from_decimal_val(const DecimalVal& val) {
+       DecimalValue result;
+       result.set_value(val.value());
+       return result;
     }
 
-    void to_decimal_val(doris_udf::DecimalVal* value) const {
-        value->int_len = _int_length;
-        value->frac_len = _frac_length;
-        value->sign = _sign;
-        memcpy(value->buffer, _buffer, sizeof(int32_t) * DECIMAL_BUFF_LENGTH);
+    void to_decimal_val(DecimalVal* value) const {
+       value->set_value(_value);
     }
 
     // set DecimalValue to zero
     void set_to_zero() {
-        _buffer_length = DECIMAL_BUFF_LENGTH;
-        memset(_buffer, 0, sizeof(int32_t) * DECIMAL_BUFF_LENGTH);
-        _int_length = 1;
-        _frac_length = 0;
-        _sign = false;
+        _value = 0;
     }
 
     void to_abs_value() {
-        _sign = false;
-    }
-
-    uint32_t hash_uint(uint32_t value, uint32_t seed) const {
-        return HashUtil::hash(&value, sizeof(value), seed);
+       if (_value < 0) _value = -_value;
     }
 
     uint32_t hash(uint32_t seed) const {
-        uint32_t int_len = round_up(_int_length);
-        uint32_t frac_len = round_up(_frac_length);
-        int idx = 0;
-        while (idx < int_len && _buffer[idx] == 0) {
-            idx++;
-        }
-        while (idx < int_len) {
-            // Hash
-            seed = hash_uint(_buffer[idx++], seed);
-        }
-        idx = int_len + frac_len;
-        while (idx > int_len && _buffer[idx - 1] == 0) {
-            idx--;
-        }
-        while (idx > int_len) {
-            // Hash
-            seed = hash_uint(_buffer[--idx], seed);
-        }
-        // Hash sign
-        return hash_uint(_sign, seed);
+        return HashUtil::hash(&_value, sizeof(_value), seed);
     }
 
     int32_t precision() const {
-        return _int_length + _frac_length;
+        return PRECISION;
     }
 
     int32_t scale() const {
-        return _frac_length;
+        return SCALE;
     }
 
     int round(DecimalValue *to, int scale, DecimalRoundMode mode);
+
+    inline static __int128 get_scale_base(int scale) {
+        static const __int128 values[] = {
+            static_cast<__int128>(1ll),
+            static_cast<__int128>(10ll),
+            static_cast<__int128>(100ll),
+            static_cast<__int128>(1000ll),
+            static_cast<__int128>(10000ll),
+            static_cast<__int128>(100000ll),
+            static_cast<__int128>(1000000ll),
+            static_cast<__int128>(10000000ll),
+            static_cast<__int128>(100000000ll),
+            static_cast<__int128>(1000000000ll),
+            static_cast<__int128>(10000000000ll),
+            static_cast<__int128>(100000000000ll),
+            static_cast<__int128>(1000000000000ll),
+            static_cast<__int128>(10000000000000ll),
+            static_cast<__int128>(100000000000000ll),
+            static_cast<__int128>(1000000000000000ll),
+            static_cast<__int128>(10000000000000000ll),
+            static_cast<__int128>(100000000000000000ll),
+            static_cast<__int128>(1000000000000000000ll),
+            static_cast<__int128>(1000000000000000000ll) * 10ll,
+            static_cast<__int128>(1000000000000000000ll) * 100ll,
+            static_cast<__int128>(1000000000000000000ll) * 1000ll,
+            static_cast<__int128>(1000000000000000000ll) * 10000ll,
+            static_cast<__int128>(1000000000000000000ll) * 100000ll,
+            static_cast<__int128>(1000000000000000000ll) * 1000000ll,
+            static_cast<__int128>(1000000000000000000ll) * 10000000ll,
+            static_cast<__int128>(1000000000000000000ll) * 100000000ll,
+            static_cast<__int128>(1000000000000000000ll) * 1000000000ll,
+            static_cast<__int128>(1000000000000000000ll) * 10000000000ll,
+            static_cast<__int128>(1000000000000000000ll) * 100000000000ll,
+            static_cast<__int128>(1000000000000000000ll) * 1000000000000ll,
+            static_cast<__int128>(1000000000000000000ll) * 10000000000000ll,
+            static_cast<__int128>(1000000000000000000ll) * 100000000000000ll,
+            static_cast<__int128>(1000000000000000000ll) * 1000000000000000ll,
+            static_cast<__int128>(1000000000000000000ll) * 10000000000000000ll,
+            static_cast<__int128>(1000000000000000000ll) * 100000000000000000ll,
+            static_cast<__int128>(1000000000000000000ll) * 100000000000000000ll * 10ll,
+            static_cast<__int128>(1000000000000000000ll) * 100000000000000000ll * 100ll,
+            static_cast<__int128>(1000000000000000000ll) * 100000000000000000ll * 1000ll};
+        if (scale >= 0 && scale < 38) return values[scale];
+        return -1;  // Overflow
+    }
+
+    bool is_zero() const {
+        return _value == 0;
+    }
 
     // For C++/IR interop, we need to be able to look up types by name.
     static const char* _s_llvm_class_name;
 
 private:
 
-    friend class MultiDistinctDecimalState;
-
-    bool is_zero() const {
-        const int32_t* buff = _buffer;
-        const int32_t* end = buff + round_up(_int_length)
-                + round_up(_frac_length);
-        while (buff < end) {
-            if (*buff++) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    // TODO(lingbin): complete this function
-    int shift (int32_t shift) {
-        return 0;
-    }
-
-    // Invoker make sure buff has enough space.
-    // return the number of "big digits".
-    int copy_int_to_decimal_int(int64_t int_value, int32_t* buff);
-
-    // ATTN: the max length of fraction part is 9 for now, so we can directly assign parameter
-    // frac_value to buff member.
-    int copy_int_to_decimal_frac(int64_t frac_value, int32_t* buff);
-
-    const int32_t* get_first_no_zero_index(int32_t* int_digit_num) const;
-
-    // _int_length is the number of *decimal* digits (NOT number of big_digit_type's !)
-    //      before the point
-    // _frac_length is the number of decimal digits after the point
-    // _buffer_length  is the length of buf (length of allocated space) in big_digit_type's,
-    //      not in bytes
-    // _sign false means positive, true means negative
-    // _buffer  is an array of big_digit_type's
-    // TODO(zc): use int64_t to aligned to 8
-    int32_t _int_length : 8;
-    int32_t _frac_length : 8;
-    int32_t _buffer_length : 8;
-    bool _sign;
-    int32_t _buffer[DECIMAL_BUFF_LENGTH];
+    __int128 _value;
 };
 
 DecimalValue operator+(const DecimalValue& v1, const DecimalValue& v2);
@@ -504,95 +352,6 @@ DecimalValue operator-(const DecimalValue& v);
 
 std::ostream& operator<<(std::ostream& os, DecimalValue const& decimal_value);
 std::istream& operator>>(std::istream& ism, DecimalValue& decimal_value);
-
-
-// TODO(lingbin) discard the fraction part?
-int64_t operator&(const DecimalValue& v1, const DecimalValue& v2);
-int64_t operator|(const DecimalValue& v1, const DecimalValue& v2);
-int64_t operator^(const DecimalValue& v1, const DecimalValue& v2);
-int64_t operator~(const DecimalValue& v1);
-
-// help to get the number of decimal_digit_t's digits
-//    e.g. for 1234567891.222 . intg=10, ROUND_UP(10) = 2.
-// It means in decimal_digit_t type buff,
-//     it takes '2' bytes to store integer part
-template<typename T> inline T round_up(T length) {
-    return (T) ((length + DIG_PER_DEC1 - 1) / DIG_PER_DEC1);
-}
-
-inline int DecimalValue::copy_int_to_decimal_int(int64_t int_value, int32_t* buff) {
-    int64_t dividend = int_value;
-    int32_t temp_buff[DECIMAL_BUFF_LENGTH];
-    int32_t index = 0; // index in temp_buffer
-
-    if (int_value == 0) {
-        _int_length = 0;
-        return 0;
-    }
-
-    int64_t quotient = 0;
-    do{
-        temp_buff[index++] = dividend % DIG_BASE;
-        quotient = dividend / DIG_BASE;
-        dividend = quotient;
-    } while (quotient != 0);
-
-    for (int32_t i = 0; i < index; ++i) {
-        buff[i] = temp_buff[index - i - 1];
-    }
-    return index;
-}
-
-inline int32_t DecimalValue::copy_int_to_decimal_frac(int64_t frac_value, int32_t* buff) {
-    if (frac_value == 0) {
-        return 0;
-    }
-    int32_t abs_frac_value = std::abs(frac_value);
-    if (std::abs(frac_value > DIG_BASE)) {
-        *buff = DIG_MAX;
-        return DIG_PER_DEC1;
-    }
-
-    *buff = abs_frac_value;
-    // Count digit length: (DIG_PER_DEC1 - the number of ending zeroes)
-    int32_t frac_len = DIG_PER_DEC1;
-    int32_t quotient = 0;
-    while ((quotient = frac_value % 10) == 0) {
-        frac_value /= 10;
-        --frac_len;
-    }
-
-    return frac_len;
-}
-
-inline const int32_t* DecimalValue::get_first_no_zero_index(
-        int32_t* int_digit_num) const {
-    int32_t temp_intg = _int_length;
-    const int32_t* buff = _buffer;
-    int32_t first_big_digit_num = (temp_intg - 1) % DIG_PER_DEC1 + 1;
-
-    while (temp_intg > 0 && *buff == 0) {
-        temp_intg -= first_big_digit_num;
-        first_big_digit_num = DIG_PER_DEC1;
-        ++buff;
-    }
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Warray-bounds"
-    // When the value of a "big digit" is "000099999", its 'intg' may be 5/6/7/8/9,
-    // we get accurate 'intg' here and the first no zero index of buff
-    if (temp_intg > 0) {
-        first_big_digit_num = (temp_intg - 1) % DIG_PER_DEC1 + 1;
-        for (; *buff < powers10[first_big_digit_num - 1]; --first_big_digit_num) {
-            --temp_intg;
-        }
-    } else {
-        temp_intg = 0;
-    }
-#pragma GCC diagnostic pop
-    *int_digit_num = temp_intg;
-    return buff;
-}
 
 std::size_t hash_value(DecimalValue const& value);
 

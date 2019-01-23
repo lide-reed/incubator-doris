@@ -21,13 +21,12 @@
 #include <sstream>
 #include <assert.h>
 
-#include "runtime/decimal_value.h"
-
 // Be careful what this includes since this needs to be linked into the UDF's
 // binary. For example, it would be unfortunate if they had a random dependency
 // on libhdfs.
 #include "udf/udf_internal.h"
 #include "common/logging.h"
+#include "common/compiler_util.h"
 #include "util/debug_util.h"
 
 #if DORIS_UDF_SDK_BUILD
@@ -405,21 +404,6 @@ void StringVal::append(FunctionContext* ctx, const uint8_t* buf, size_t buf_len,
         memcpy(ptr + len + buf_len, buf2, buf2_len);
         len += buf_len + buf2_len;
     }
-}
-
-bool DecimalVal::operator==(const DecimalVal& other) const {
-    if (is_null && other.is_null) {
-        return true;
-    }
-
-    if (is_null || other.is_null) {
-        return false;
-    }
-
-    // TODO(lingbin): implement DecimalVal's own cmp method 
-    doris::DecimalValue value1 = doris::DecimalValue::from_decimal_val(*this);
-    doris::DecimalValue value2 = doris::DecimalValue::from_decimal_val(other);
-    return value1 == value2;
 }
 
 const FunctionContext::TypeDesc* FunctionContext::get_arg_type(int arg_idx) const {

@@ -652,14 +652,20 @@ struct StringVal : public AnyVal {
 };
 
 struct DecimalVal : public AnyVal {
-    int8_t int_len;
-    int8_t frac_len;
-    bool sign;
-    int32_t buffer[9] = {0};
+
+    __int128 _value;
+
 
     // Default value is zero
-    DecimalVal() : int_len(0), frac_len(0), sign(false) {
+    DecimalVal() : _value(0) {
+        is_null = false;
         // Do nothing here
+    }
+
+    const __int128& value() const { return _value; }
+
+    void set_value(__int128 value) {
+        _value = value;
     }
 
     static DecimalVal null() {
@@ -669,20 +675,19 @@ struct DecimalVal : public AnyVal {
     }
     
     void set_to_zero() {
-        memset(buffer, 0, sizeof(int32_t) * 9);
-        int_len = 0;
-        frac_len = 0;
-        sign = 0;
+        _value = 0;
     }
     
     void set_to_abs_value() {
-        sign = false;
+        if (_value < 0) _value = -_value;
     }
 
-    bool operator==(const DecimalVal& other) const; 
+    bool operator==(const DecimalVal& other) const {
+        return _value == other.value();
+    }
 
     bool operator!=(const DecimalVal& other) const {
-        return !(*this == other);
+        return _value != other.value();
     }
 
 };
