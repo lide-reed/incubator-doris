@@ -36,6 +36,7 @@ static int do_add(int128_t x, int128_t y, int128_t* result) {
     } else {
         *result = DecimalValue::MAX_DECIMAL_VALUE;
         error = E_DEC_OVERFLOW;
+        LOG(INFO) << "overflow (x=" << x << ", y=" << y << ")";
     }
     return error;
 }
@@ -68,6 +69,7 @@ static int do_mul(int128_t x, int128_t y, int128_t* result) {
     int bits = 128 + 128 - clz128(x) - clz128(y); 
     if (bits > (120 + 1)) {
         *result = DecimalValue::MAX_DECIMAL_VALUE;
+        LOG(INFO) << "overflow (x=" << x << ", y=" << y << ")";
         error = E_DEC_OVERFLOW;
         return error;
     }
@@ -78,6 +80,7 @@ static int do_mul(int128_t x, int128_t y, int128_t* result) {
     // overflow
     if (*result > DecimalValue::MAX_DECIMAL_VALUE) {
         *result = DecimalValue::MAX_DECIMAL_VALUE;
+        LOG(INFO) << "overflow (x=" << x << ", y=" << y << ")";
         error = E_DEC_OVERFLOW;
         return error;
     }
@@ -89,6 +92,7 @@ static int do_mul(int128_t x, int128_t y, int128_t* result) {
         if (remainder >= (DecimalValue::ONE_BILLION >> 1)) {
             *result += 1;
         }
+        LOG(INFO) << "truncate (x=" << x << ", y=" << y << ")" << ", result=" << *result;
     }
 
     return error;
@@ -107,6 +111,7 @@ static int do_div(int128_t x, int128_t y, int128_t* result) {
         if (remainder >= (y >> 1)) {
             *result += 1;
         }
+        LOG(INFO) << "truncate (x=" << x << ", y=" << y << ")" << ", result=" << *result;
     }
 
     return error;
@@ -252,8 +257,14 @@ DecimalValue& DecimalValue::operator+=(const DecimalValue& other) {
 int DecimalValue::parse_from_str(const char* decimal_str, int32_t length) {
     int32_t error = E_DEC_OK;
     StringParser::ParseResult result = StringParser::PARSE_SUCCESS;
+    
+    LOG(INFO) << "decimal_str=" << decimal_str;
+
     _value = StringParser::string_to_decimal(decimal_str, length, 
 		    PRECISION, SCALE, &result);
+
+    LOG(INFO) << "_value=" << _value;
+
     if (result != StringParser::PARSE_SUCCESS) { 
        error = E_DEC_BAD_NUM;
     }
@@ -262,6 +273,8 @@ int DecimalValue::parse_from_str(const char* decimal_str, int32_t length) {
 
 std::string DecimalValue::to_string(int round_scale) const {
   if (_value == 0) return std::string(1, '0');
+
+  LOG(INFO) << "_value=" << _value;
 
   int last_char_idx = PRECISION + 2 + (_value < 0);  
   std::string str = std::string(last_char_idx, '0');
@@ -303,6 +316,7 @@ std::string DecimalValue::to_string(int round_scale) const {
   }
   if (scale > 1 && scale <= len) str.erase(len - scale, len - 1);
 
+  LOG(INFO) << "str=" << _value;
   return str;
 }
 
