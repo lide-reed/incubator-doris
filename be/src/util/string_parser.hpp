@@ -614,7 +614,7 @@ inline __int128 StringParser::string_to_decimal(const char* s, int len,
       if (LIKELY(type_precision > precision)) {
         value = (value * 10) + (c - '0');  // Benchmarks are faster with parenthesis...
       }
-      //DCHECK(value >= 0);  // For some reason //DCHECK_GE doesn't work with __int128.
+      DCHECK(value >= 0);  // For some reason //DCHECK_GE doesn't work with __int128.
       ++precision;
       scale += found_dot;
     } else if (c == '.' && LIKELY(!found_dot)) {
@@ -667,11 +667,11 @@ inline __int128 StringParser::string_to_decimal(const char* s, int len,
       if (LIKELY(divisor >= 0)) {
         value /= divisor;
       } else {
-        //DCHECK(divisor == -1); // //DCHECK_EQ doesn't work with __int128.
+        DCHECK(divisor == -1); // //DCHECK_EQ doesn't work with __int128.
         value = 0;
       }
     }
-    //DCHECK(value >= 0); // //DCHECK_GE doesn't work with __int128.
+    DCHECK(value >= 0); // //DCHECK_GE doesn't work with __int128.
   } else if (UNLIKELY(!found_value && !found_dot)) {
     *result = StringParser::PARSE_FAILURE;
   }

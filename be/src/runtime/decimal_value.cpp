@@ -26,8 +26,10 @@ namespace doris {
 
 const char* DecimalValue::_s_llvm_class_name = "class.doris::DecimalValue";
 
+static inline int128_t abs(const int128_t& x) { return (x < 0) ? -x : x; }
+
 // x>=0 && y>=0
-static int do_add(__int128 x, __int128 y, __int128* result) {
+static int do_add(int128_t x, int128_t y, int128_t* result) {
     int error = E_DEC_OK;
     if (DecimalValue::MAX_DECIMAL_VALUE - x >= y) {
         *result = x + y;
@@ -39,13 +41,13 @@ static int do_add(__int128 x, __int128 y, __int128* result) {
 }
 
 // x>=0 && y>=0
-static int do_sub(__int128 x, __int128 y, __int128* result) {
+static int do_sub(int128_t x, int128_t y, int128_t* result) {
     int error = E_DEC_OK;
     *result = x - y;
     return error;
 }
 
-// clear leading zero for int128
+// clear leading zero for __int128
 static int clz128(unsigned __int128 v) {
   if (v == 0) return 128;
   unsigned __int128 shifted = v >> 64;
@@ -56,73 +58,71 @@ static int clz128(unsigned __int128 v) {
   }
 }
 
-static int do_mul(__int128 x, __int128 y, __int128* result) {
+// x>0 && y>0
+static int do_mul(int128_t x, int128_t y, int128_t* result) {
     int error = E_DEC_OK;
-    if (x == 0 || y == 0) {
-        *result = 0;
-        return error;
-    }
 
-    // count leading zero
-    int clz = clz128(abs(x)) + clz128(abs(y)); 
-    if (clz <= 128 && (abs(x) > DecimalValue::MAX_DECIMAL_VALUE / abs(y))) {
+    // The bits of result as following is 120
+    // clz128((MAX_INT_VALUE * ONE_BILLION + MAX_FRAC_VALUE) * ONE_BILLION) = 8
+    // The bits range of m * n is in (m+n-1 --> m+n)
+    int bits = 128 + 128 - clz128(x) - clz128(y); 
+    if (bits > (120 + 1)) {
         *result = DecimalValue::MAX_DECIMAL_VALUE;
         error = E_DEC_OVERFLOW;
         return error;
     }
 
-    *result = x * y / DecimalValue::MULTIPLIER;
+    int128_t product = x * y;
+    *result = product / DecimalValue::ONE_BILLION;
 
     // overflow
-    if (*result * DecimalValue::MULTIPLIER / y != x) {
+    if (*result > DecimalValue::MAX_DECIMAL_VALUE) {
         *result = DecimalValue::MAX_DECIMAL_VALUE;
         error = E_DEC_OVERFLOW;
+        return error;
     }
+
+    // truncate with round
+    int128_t remainder = product % DecimalValue::ONE_BILLION;
+    if (remainder != 0) {
+        error = E_DEC_TRUNCATED;
+        if (remainder >= (DecimalValue::ONE_BILLION >> 1)) {
+            *result += 1;
+        }
+    }
+
     return error;
 }
 
-static int do_div(__int128 x, __int128 y, __int128* result) {
+// x>0 && y>0
+static int do_div(int128_t x, int128_t y, int128_t* result) {
     int error = E_DEC_OK;
-    if (y == 0) {
-        *result = 0;
-        return E_DEC_DIV_ZERO;
-    }
-
-    if (x == 0) {
-        *result = 0;
-        return error;
-    }
-
-    *result = x * DecimalValue::MULTIPLIER / y;
+    int128_t dividend = x * DecimalValue::ONE_BILLION;
+    *result = dividend / y;
 
     // overflow
-    if (*result * y != x * DecimalValue::MULTIPLIER) {
-        *result = DecimalValue::MAX_DECIMAL_VALUE;
-        error = E_DEC_OVERFLOW;
+    int128_t remainder = dividend % y;
+    if (remainder != 0) {
+        error = E_DEC_TRUNCATED;
+        if (remainder >= (y >> 1)) {
+            *result += 1;
+        }
     }
+
     return error;
 }
 
-static int do_mod(__int128 x, __int128 y, __int128* result) {
+// x>0 && y>0
+static int do_mod(int128_t x, int128_t y, int128_t* result) {
     int error = E_DEC_OK;
-    if (y == 0) {
-        *result = 0;
-        return E_DEC_DIV_ZERO;
-    }
-
-    if (x == 0) {
-        *result = 0;
-        return error;
-    }
-
-    *result = x % y;
+    *result = x * DecimalValue::ONE_BILLION % y;
     return error;
 }
 
 DecimalValue operator+(const DecimalValue& v1, const DecimalValue& v2) {
-    __int128 result;
-    __int128 x = v1.value();
-    __int128 y = v2.value();
+    int128_t result;
+    int128_t x = v1.value();
+    int128_t y = v2.value();
     DecimalValue value;
     if (x == 0) {
        result = y;
@@ -148,9 +148,9 @@ DecimalValue operator+(const DecimalValue& v1, const DecimalValue& v2) {
 }
 
 DecimalValue operator-(const DecimalValue& v1, const DecimalValue& v2) {
-    __int128 result;
-    __int128 x = v1.value();
-    __int128 y = v2.value();
+    int128_t result;
+    int128_t x = v1.value();
+    int128_t y = v2.value();
     DecimalValue value;
     if (x == 0) {
        result = -y;
@@ -177,37 +177,52 @@ DecimalValue operator-(const DecimalValue& v1, const DecimalValue& v2) {
 }
 
 DecimalValue operator*(const DecimalValue& v1, const DecimalValue& v2){
-    __int128 result;
-    __int128 x = v1.value();
-    __int128 y = v2.value();
-    DecimalValue value;
+    int128_t result;
+    int128_t x = v1.value();
+    int128_t y = v2.value();
+    DecimalValue value; // default 0
 
-    do_mul(x, y, &result);
+    if (x == 0 || y == 0) return value;
 
+    bool is_positive = (x > 0 && y > 0) || (x < 0 && y < 0);
+
+    do_mul(abs(x), abs(y), &result);
+
+    if (!is_positive) result = -result;
     value.set_value(result);
+
     return value;
 }
 
 DecimalValue operator/(const DecimalValue& v1, const DecimalValue& v2){
-    __int128 result;
-    __int128 x = v1.value();
-    __int128 y = v2.value();
+    int128_t result;
+    int128_t x = v1.value();
+    int128_t y = v2.value();
     DecimalValue value;
 
-    do_div(x, y, &result);
+    //todo: return 0 for divide zero 
+    if (x == 0 || y == 0) return value;
+    bool is_positive = (x > 0 && y > 0) || (x < 0 && y < 0);
+    do_div(abs(x), abs(y), &result);
 
+    if (!is_positive) result = -result;
     value.set_value(result);
+
     return value;
 }
 
 DecimalValue operator%(const DecimalValue& v1, const DecimalValue& v2){
-    __int128 result;
-    __int128 x = v1.value();
-    __int128 y = v2.value();
+    int128_t result;
+    int128_t x = v1.value();
+    int128_t y = v2.value();
     DecimalValue value;
 
-    do_mod(x, y, &result);
+    //todo: return 0 for divide zero 
+    if (x == 0 || y == 0) return value;
+    bool is_positive = (x > 0 && y > 0) || (x < 0 && y < 0);
+    do_mod(abs(x), abs(y), &result);
 
+    if (!is_positive) result = -result;
     value.set_value(result);
     return value;
 }
@@ -237,11 +252,9 @@ DecimalValue& DecimalValue::operator+=(const DecimalValue& other) {
 int DecimalValue::parse_from_str(const char* decimal_str, int32_t length) {
     int32_t error = E_DEC_OK;
     StringParser::ParseResult result = StringParser::PARSE_SUCCESS;
-    if (result == StringParser::PARSE_SUCCESS) { 
-        _value = StringParser::string_to_decimal(decimal_str, length, 
-                 PRECISION, SCALE, &result);
-    } else {
-       set_to_zero();
+    _value = StringParser::string_to_decimal(decimal_str, length, 
+		    PRECISION, SCALE, &result);
+    if (result != StringParser::PARSE_SUCCESS) { 
        error = E_DEC_BAD_NUM;
     }
     return error;
@@ -253,7 +266,7 @@ std::string DecimalValue::to_string(int round_scale) const {
   int last_char_idx = PRECISION + 2 + (_value < 0);  
   std::string str = std::string(last_char_idx, '0');
 
-  __int128 remaining_value = _value;
+  int128_t remaining_value = _value;
   int first_digit_idx = 0;
   if (_value < 0) {
       remaining_value = -_value;
@@ -280,14 +293,15 @@ std::string DecimalValue::to_string(int round_scale) const {
 
   // right trim and round
   int scale = 0;
-  for(scale = 0; scale < SCALE; scale++) {
-      if (str[str.size() - scale - 1] != '0') break;
+  int len = str.size();
+  for(scale = 0; scale < SCALE && scale < len; scale++) {
+      if (str[len - scale - 1] != '0') break;
   }
   if (scale == SCALE) scale++; //integer, trim .
   if (round_scale >= 0 && round_scale <= SCALE) {
       scale = std::max(scale, SCALE - round_scale);
   }
-  if (scale > 1) str.erase(str.size() - scale, str.size() - 1);
+  if (scale > 1 && scale <= len) str.erase(len - scale, len - 1);
 
   return str;
 }
@@ -342,7 +356,7 @@ void DecimalValue::to_max_decimal(int32_t precision, int32_t scale) {
    
    int64_t int_value = INT_MAX_VALUE[precision - scale - 1];
    int64_t frac_value = FRAC_MAX_VALUE[scale - 1];
-   _value = static_cast<__int128>(int_value) * DecimalValue::MULTIPLIER + frac_value;
+   _value = static_cast<int128_t>(int_value) * DecimalValue::ONE_BILLION + frac_value;
    if (is_negtive) _value = -_value;
 }
 
@@ -352,16 +366,16 @@ std::size_t hash_value(DecimalValue const& value) {
 
 int DecimalValue::round(DecimalValue *to, int rounding_scale, DecimalRoundMode op) {
     int32_t error = E_DEC_OK;
-    __int128 result;
+    int128_t result;
     
     if (rounding_scale >= SCALE) return error;
     if (rounding_scale < -(PRECISION - SCALE)) return 0;
 
-    __int128 base = get_scale_base(SCALE - rounding_scale);
+    int128_t base = get_scale_base(SCALE - rounding_scale);
     result = _value / base;
 
     int one = _value > 0 ? 1 : -1;
-    __int128 remainder = _value % base;
+    int128_t remainder = _value % base;
     switch (op) {
         case HALF_UP:
         case HALF_EVEN:
