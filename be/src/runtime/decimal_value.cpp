@@ -360,17 +360,21 @@ void DecimalValue::to_max_decimal(int32_t precision, int32_t scale) {
         999999999
    };
 
+   // precison > 0 && scale >= 0 && scale <= SCALE
    if (precision <= 0 || scale < 0) return;
-
-   // normalize precision and scale
-   if (precision > PRECISION) precision = PRECISION;
    if (scale > SCALE) scale = SCALE;
+
+   // precision: (scale, PRECISION]
+   if (precision > PRECISION) precision = PRECISION;
    if (precision - scale > PRECISION - SCALE) {
        precision = PRECISION - SCALE + scale;
+   } else if (precision <= scale) {
+       LOG(WARN) << "Warning: error precision: " << precision << " or scale: " << scale;
+       precision = scale + 1; // corect error precision
    }
    
    int64_t int_value = INT_MAX_VALUE[precision - scale - 1];
-   int64_t frac_value = FRAC_MAX_VALUE[scale - 1];
+   int64_t frac_value = scale == 0? 0 : FRAC_MAX_VALUE[scale - 1];
    _value = static_cast<int128_t>(int_value) * DecimalValue::ONE_BILLION + frac_value;
    if (is_negtive) _value = -_value;
 }
