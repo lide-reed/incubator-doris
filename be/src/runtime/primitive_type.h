@@ -117,10 +117,8 @@ inline int get_byte_size(PrimitiveType type) {
     case TYPE_LARGEINT:
     case TYPE_DATETIME:
     case TYPE_DATE:
-        return 16;
-
     case TYPE_DECIMAL:
-        return 40;
+        return 16;
 
     case INVALID_TYPE:
     default:
@@ -154,10 +152,8 @@ inline int get_real_byte_size(PrimitiveType type) {
 
     case TYPE_DATETIME:
     case TYPE_DATE:
-        return 16;
-
     case TYPE_DECIMAL:
-        return 40;
+        return 16;
 
     case TYPE_LARGEINT:
         return 16;

@@ -214,10 +214,8 @@ struct TypeDescriptor {
         case TYPE_LARGEINT:
         case TYPE_DATETIME:
         case TYPE_DATE:
-            return 16;
-
         case TYPE_DECIMAL:
-            return 40;
+            return 16;
 
         case INVALID_TYPE:
         default:
