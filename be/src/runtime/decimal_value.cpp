@@ -369,7 +369,7 @@ void DecimalValue::to_max_decimal(int32_t precision, int32_t scale) {
    if (precision - scale > PRECISION - SCALE) {
        precision = PRECISION - SCALE + scale;
    } else if (precision <= scale) {
-       LOG(WARN) << "Warning: error precision: " << precision << " or scale: " << scale;
+       LOG(WARNING) << "Warning: error precision: " << precision << " or scale: " << scale;
        precision = scale + 1; // corect error precision
    }
    
