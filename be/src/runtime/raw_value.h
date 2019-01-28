@@ -283,7 +283,7 @@ inline uint32_t RawValue::get_hash_value(
         return HashUtil::hash(v, 16, seed);
 
     case TYPE_DECIMAL:
-        return HashUtil::hash(v, 40, seed);
+        return HashUtil::hash(v, 16, seed);
 
     case TYPE_LARGEINT:
         return HashUtil::hash(v, 16, seed);
@@ -338,7 +338,7 @@ inline uint32_t RawValue::get_hash_value_fvn(
         return HashUtil::fnv_hash(v, 16, seed);
 
     case TYPE_DECIMAL:
-        return ((DecimalValue *) v)->hash(seed);
+        return HashUtil::fnv_hash(v, 16, seed);
 
     case TYPE_LARGEINT:
         return HashUtil::fnv_hash(v, 16, seed);
@@ -400,11 +400,7 @@ inline uint32_t RawValue::zlib_crc32(const void* v, const TypeDescriptor& type, 
         return HashUtil::zlib_crc_hash(buf, end - buf - 1, seed);
     }
     case TYPE_DECIMAL: {
-        const DecimalValue* dec_val = (const DecimalValue*)v;
-        int64_t int_val = dec_val->int_value();
-        int32_t frac_val = dec_val->frac_value();
-        seed = HashUtil::zlib_crc_hash(&int_val, sizeof(int_val), seed);
-        return HashUtil::zlib_crc_hash(&frac_val, sizeof(frac_val), seed);
+        return HashUtil::zlib_crc_hash(v, 16, seed);
     }
     default:
         DCHECK(false) << "invalid type: " << type;
