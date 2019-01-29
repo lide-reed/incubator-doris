@@ -49,7 +49,7 @@ public enum PrimitiveType {
     // Aligning to 8 bytes so 16 total.
     VARCHAR("VARCHAR", 16, TPrimitiveType.VARCHAR),
 
-    DECIMAL("DECIMAL", 40, TPrimitiveType.DECIMAL),
+    DECIMAL("DECIMAL", 16, TPrimitiveType.DECIMAL),
     
     HLL("HLL", 16, TPrimitiveType.HLL),
     // Unsupported scalar types.
