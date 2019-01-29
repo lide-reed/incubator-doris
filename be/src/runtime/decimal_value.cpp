@@ -120,7 +120,7 @@ static int do_div(int128_t x, int128_t y, int128_t* result) {
 // x>0 && y>0
 static int do_mod(int128_t x, int128_t y, int128_t* result) {
     int error = E_DEC_OK;
-    *result = x * DecimalValue::ONE_BILLION % y;
+    *result = x % y;
     return error;
 }
 
