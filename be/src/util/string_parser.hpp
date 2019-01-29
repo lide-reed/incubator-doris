@@ -630,8 +630,12 @@ inline __int128 StringParser::string_to_decimal(const char* s, int len,
       }
       break;
     } else {
-      *result = StringParser::PARSE_FAILURE;
-      return 0;
+      // reserve the value which has been parsed sub-string when error occurs
+      //*result = StringParser::PARSE_FAILURE;
+      //return 0;
+      *result = StringParser::PARSE_SUCCESS;
+      value *= get_scale_multiplier(type_scale - scale);
+      return is_negative ? -value : value;
     }
   }
 
