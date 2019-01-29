@@ -687,7 +687,7 @@ public class ScalarType extends Type {
             case DATETIME:
                 return 8;
             case DECIMAL:
-                return 40;
+                return 16;
             case CHAR:
             case VARCHAR:
                 return len;
