@@ -276,6 +276,7 @@ std::string DecimalValue::to_string(int round_scale) const {
 
   LOG(INFO) << "_value=" << _value;
   LOG(INFO) << "round_scale=" << round_scale;
+  LOG(INFO) << "### &_value=" << &_value;
 
   int last_char_idx = PRECISION + 2 + (_value < 0);  
   std::string str = std::string(last_char_idx, '0');
