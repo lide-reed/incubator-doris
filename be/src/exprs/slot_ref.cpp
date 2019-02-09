@@ -518,6 +518,12 @@ DecimalVal SlotRef::get_decimal_val(ExprContext* context, TupleRow* row) {
     }
     DecimalVal dec_val;
     reinterpret_cast<DecimalValue*>(t->get_slot(_slot_offset))->to_decimal_val(&dec_val);
+
+    int64_t addr = (int64_t)(&dec_val);
+    if (addr % 16 != 0) {
+        LOG(INFO) << "### &dec_val=" << addr;
+    }
+
     return dec_val;
 }
 

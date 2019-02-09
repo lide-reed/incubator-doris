@@ -140,11 +140,24 @@ public:
 
     void* get_slot(int offset) {
         DCHECK(offset != -1); // -1 offset indicates non-materialized slot
+
+        void* value = reinterpret_cast<char*>(this) + offset;
+        int64_t addr = (int64_t)value;
+        if (addr % 16 != 0) {
+          LOG(INFO) << "### &value=" << addr;
+          LOG(INFO) << "### offset=" << offset;
+        }
         return reinterpret_cast<char*>(this) + offset;
     }
 
     const void* get_slot(int offset) const {
         DCHECK(offset != -1);  // -1 offset indicates non-materialized slot
+        const void* value = reinterpret_cast<const char*>(this) + offset;
+        int64_t addr = (int64_t)value;
+        if (addr % 16 != 0) {
+          LOG(INFO) << "### &value=" << addr;
+          LOG(INFO) << "### offset=" << offset;
+        }
         return reinterpret_cast<const char*>(this) + offset;
     }
 
@@ -170,6 +183,7 @@ public:
         int64_t addr = (int64_t)value;
         if (addr % 16 != 0) {
           LOG(INFO) << "### &value=" << addr;
+          LOG(INFO) << "### offset=" << offset;
         }
         return value;
     }

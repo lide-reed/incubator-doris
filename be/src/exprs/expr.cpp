@@ -828,6 +828,7 @@ DateTimeVal Expr::get_datetime_val(ExprContext* context, TupleRow* row) {
 DecimalVal Expr::get_decimal_val(ExprContext* context, TupleRow* row) {
     DecimalVal val;
     // ((DecimalValue*)get_value(row))->to_decimal_val(&val);
+    LOG(INFO) << "### this DecimalVal is zero";
     return val;
 }
 
