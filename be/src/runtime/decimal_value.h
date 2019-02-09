@@ -249,10 +249,23 @@ public:
     static DecimalValue from_decimal_val(const DecimalVal& val) {
        DecimalValue result;
        result.set_value(val.value());
+
+       int64_t addr = (int64_t)(&result);
+       if (addr % 16 != 0) {
+           LOG(INFO) << "### &result=" << addr;
+       }
+
+
        return result;
     }
 
     void to_decimal_val(DecimalVal* value) const {
+        int64_t addr = (int64_t)(&_value);
+        if (addr % 16 != 0) {
+            LOG(INFO) << "### &_value=" << addr;
+            LOG(INFO) << "### &this=" << (int64_t)this;
+        }
+
        value->set_value(_value);
     }
 
