@@ -516,12 +516,15 @@ DecimalVal SlotRef::get_decimal_val(ExprContext* context, TupleRow* row) {
     if (t == NULL || t->is_null(_null_indicator_offset)) {
         return DecimalVal::null();
     }
-    DecimalVal dec_val;
-    reinterpret_cast<DecimalValue*>(t->get_slot(_slot_offset))->to_decimal_val(&dec_val);
 
-    int64_t addr = (int64_t)(&dec_val);
-    if (addr % 16 != 0) {
-        LOG(INFO) << "### &dec_val=" << addr;
+    DecimalVal dec_val;
+    DecimalValue* value = reinterpret_cast<DecimalValue*>(t->get_slot(_slot_offset));
+    value->to_decimal_val(&dec_val);
+
+    int64_t addr1 = (int64_t)(value);
+    int64_t addr2 = (int64_t)(&dec_val);
+    if (addr1 % 16 != 0 || addr2 % 16 != 0) {
+        LOG(INFO) << "### value=" << addr1 << ", &dec_val=" << addr2;
     }
 
     return dec_val;

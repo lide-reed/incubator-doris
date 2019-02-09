@@ -144,8 +144,7 @@ public:
         void* value = reinterpret_cast<char*>(this) + offset;
         int64_t addr = (int64_t)value;
         if (addr % 16 != 0) {
-          LOG(INFO) << "### &value=" << addr;
-          LOG(INFO) << "### offset=" << offset;
+          LOG(INFO) << "### &value=" << addr << ", offset=" << offset;
         }
         return reinterpret_cast<char*>(this) + offset;
     }
@@ -155,8 +154,7 @@ public:
         const void* value = reinterpret_cast<const char*>(this) + offset;
         int64_t addr = (int64_t)value;
         if (addr % 16 != 0) {
-          LOG(INFO) << "### &value=" << addr;
-          LOG(INFO) << "### offset=" << offset;
+          LOG(INFO) << "### &value=" << addr << ", offset=" << offset;
         }
         return reinterpret_cast<const char*>(this) + offset;
     }
@@ -182,8 +180,7 @@ public:
         DecimalValue* value = reinterpret_cast<DecimalValue*>(reinterpret_cast<char*>(this) + offset);
         int64_t addr = (int64_t)value;
         if (addr % 16 != 0) {
-          LOG(INFO) << "### &value=" << addr;
-          LOG(INFO) << "### offset=" << offset;
+          LOG(INFO) << "### &value=" << addr << ", offset=" << offset;
         }
         return value;
     }
