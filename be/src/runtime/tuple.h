@@ -166,7 +166,12 @@ public:
 
     DecimalValue* get_decimal_slot(int offset) {
         DCHECK(offset != -1);  // -1 offset indicates non-materialized slot
-        return reinterpret_cast<DecimalValue*>(reinterpret_cast<char*>(this) + offset);
+        DecimalValue* value = reinterpret_cast<DecimalValue*>(reinterpret_cast<char*>(this) + offset);
+        int64_t addr = (int64_t)value;
+        if (addr % 16 != 0) {
+          LOG(INFO) << "### &value=" << addr;
+        }
+        return value;
     }
 
     // For C++/IR interop, we need to be able to look up types by name.
