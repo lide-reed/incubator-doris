@@ -79,6 +79,11 @@ public:
 
     DecimalValue(const std::string& decimal_str) {
         parse_from_str(decimal_str.c_str(), decimal_str.size());
+
+        int64_t addr = (int64_t)(&_value);
+        if (addr % 16 != 0) {
+            LOG(INFO) << "### &_value=" << addr;
+        }
     }
 
     // Construct from olap engine
@@ -99,6 +104,11 @@ public:
 
         _value = static_cast<int128_t>(int_value) * ONE_BILLION + frac_value;
        if (is_negtive) _value = -_value;
+
+        int64_t addr = (int64_t)(&_value);
+        if (addr % 16 != 0) {
+            LOG(INFO) << "### &_value=" << addr;
+        }
     }
 
     DecimalValue(int64_t int_value) {
@@ -254,7 +264,6 @@ public:
        if (addr % 16 != 0) {
            LOG(INFO) << "### &result=" << addr;
        }
-
 
        return result;
     }

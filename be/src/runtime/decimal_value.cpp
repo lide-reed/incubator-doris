@@ -258,12 +258,8 @@ int DecimalValue::parse_from_str(const char* decimal_str, int32_t length) {
     int32_t error = E_DEC_OK;
     StringParser::ParseResult result = StringParser::PARSE_SUCCESS;
     
-    LOG(INFO) << "decimal_str=" << decimal_str;
-
     _value = StringParser::string_to_decimal(decimal_str, length, 
 		    PRECISION, SCALE, &result);
-
-    LOG(INFO) << "_value=" << _value;
 
     if (result != StringParser::PARSE_SUCCESS) { 
        error = E_DEC_BAD_NUM;
@@ -274,10 +270,9 @@ int DecimalValue::parse_from_str(const char* decimal_str, int32_t length) {
 std::string DecimalValue::to_string(int round_scale) const {
   if (_value == 0) return std::string(1, '0');
 
-  LOG(INFO) << "_value=" << _value;
-  LOG(INFO) << "round_scale=" << round_scale;
   int64_t addr = (int64_t)(&_value);
   if (addr % 16 != 0) {
+      LOG(INFO) << "_value=" << _value;
       LOG(INFO) << "### &_value=" << addr;
   }
 

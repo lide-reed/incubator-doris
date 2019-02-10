@@ -372,6 +372,10 @@ void* ExprContext::get_value(Expr* e, TupleRow* row) {
             return NULL;
         }
         _result.decimal_val = DecimalValue::from_decimal_val(v);
+        int64_t addr = (int64_t)(&_result.decimal_val);
+        if (addr % 16 != 0) {
+            LOG(INFO) << "### item=" << addr;
+        }
         return &_result.decimal_val;
     }
 #if 0

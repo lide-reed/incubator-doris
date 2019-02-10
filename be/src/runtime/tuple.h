@@ -144,7 +144,7 @@ public:
         void* value = reinterpret_cast<char*>(this) + offset;
         int64_t addr = (int64_t)value;
         if (addr % 16 != 0) {
-          LOG(INFO) << "### &value=" << addr << ", offset=" << offset;
+          LOG(INFO) << "### &value=" << addr << ", offset=" << offset << ", this=" << this;
         }
         return reinterpret_cast<char*>(this) + offset;
     }
