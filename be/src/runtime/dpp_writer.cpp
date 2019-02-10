@@ -208,11 +208,25 @@ Status DppWriter::append_one_row(TupleRow* row) {
             break;
         }
         case TYPE_DECIMAL: {
+            int64_t addr = (int64_t)(item);
+            if (addr % 16 != 0) {
+                LOG(INFO) << "### item=" << addr;
+            }
             const DecimalValue* decimal_val = reinterpret_cast<const DecimalValue*>(item);
-            int64_t int_val = decimal_val->int_value();
-            int32_t frac_val = decimal_val->frac_value();
-            append_to_buf(&int_val, sizeof(int_val));
-            append_to_buf(&frac_val, sizeof(frac_val));
+            addr = (int64_t)(decimal_val);
+            if (addr % 16 != 0) {
+                LOG(INFO) << "### decimal_val=" << addr;
+            }
+            std::string decimal_str;
+            int output_scale = _output_expr_ctxs[i]->root()->output_scale();
+
+            if (output_scale > 0 && output_scale <= 30) {
+                decimal_str = decimal_val->to_string(output_scale);
+            } else {
+                decimal_str = decimal_val->to_string();
+            }
+
+            append_to_buf(decimal_str.c_str(), decimal_str.length());
             break;
         }
         default: {
