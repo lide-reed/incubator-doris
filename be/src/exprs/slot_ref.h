@@ -100,6 +100,11 @@ inline void* SlotRef::get_value(Expr* expr, TupleRow* row) {
     if (t == NULL || t->is_null(ref->_null_indicator_offset)) {
         return NULL;
     }
+    void* value = t->get_slot(ref->_slot_offset);
+    int64_t addr = (int64_t)value;
+    if (addr % 16 != 0) {
+        LOG(INFO) << "### &value=" << addr << ", offset=" << ref->_slot_offset << ", tuple=" << t;
+    }
     return t->get_slot(ref->_slot_offset);
 }
 
