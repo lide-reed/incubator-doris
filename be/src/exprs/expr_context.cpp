@@ -267,6 +267,7 @@ void* ExprContext::get_value(TupleRow* row) {
             }
         }
     }
+    return value;
 }
 
 bool ExprContext::is_nullable() {
