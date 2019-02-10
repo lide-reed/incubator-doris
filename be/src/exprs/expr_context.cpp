@@ -249,10 +249,24 @@ void ExprContext::get_value(TupleRow* row, bool as_ascii, TColumnValue* col_val)
 }
 
 void* ExprContext::get_value(TupleRow* row) {
+    void *value;
     if (_root->is_slotref()) {
-        return SlotRef::get_value(_root, row);
+        value = SlotRef::get_value(_root, row);
+        if (_root->type().type == TYPE_DECIMAL) {
+            int64_t addr = (int64_t)(&value);
+            if (addr % 16 != 0) {
+                LOG(INFO) << "### value=" << addr;
+            }
+        }
+    } else {
+        value = get_value(_root, row);
+        if (_root->type().type == TYPE_DECIMAL) {
+            int64_t addr = (int64_t)(&value);
+            if (addr % 16 != 0) {
+                LOG(INFO) << "### value=" << addr;
+            }
+        }
     }
-    return get_value(_root, row);
 }
 
 bool ExprContext::is_nullable() {
