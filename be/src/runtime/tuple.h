@@ -140,22 +140,11 @@ public:
 
     void* get_slot(int offset) {
         DCHECK(offset != -1); // -1 offset indicates non-materialized slot
-
-        void* value = reinterpret_cast<char*>(this) + offset;
-        int64_t addr = (int64_t)value;
-        if (addr % 16 != 0) {
-          LOG(INFO) << "### &value=" << addr << ", offset=" << offset << ", this=" << this;
-        }
         return reinterpret_cast<char*>(this) + offset;
     }
 
     const void* get_slot(int offset) const {
         DCHECK(offset != -1);  // -1 offset indicates non-materialized slot
-        const void* value = reinterpret_cast<const char*>(this) + offset;
-        int64_t addr = (int64_t)value;
-        if (addr % 16 != 0) {
-          LOG(INFO) << "### &value=" << addr << ", offset=" << offset;
-        }
         return reinterpret_cast<const char*>(this) + offset;
     }
 
@@ -177,12 +166,7 @@ public:
 
     DecimalValue* get_decimal_slot(int offset) {
         DCHECK(offset != -1);  // -1 offset indicates non-materialized slot
-        DecimalValue* value = reinterpret_cast<DecimalValue*>(reinterpret_cast<char*>(this) + offset);
-        int64_t addr = (int64_t)value;
-        if (addr % 16 != 0) {
-          LOG(INFO) << "### &value=" << addr << ", offset=" << offset;
-        }
-        return value;
+        return reinterpret_cast<DecimalValue*>(reinterpret_cast<char*>(this) + offset);
     }
 
     // For C++/IR interop, we need to be able to look up types by name.

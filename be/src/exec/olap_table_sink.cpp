@@ -689,7 +689,6 @@ int OlapTableSink::_validate_data(RuntimeState* state, RowBatch* batch, Bitmap* 
             }
             case TYPE_DECIMAL: {
                 DecimalValue* dec_val = (DecimalValue*)slot;
-
                 if (dec_val->scale() > desc->type().scale) {
                     int code = dec_val->round(dec_val, desc->type().scale, HALF_UP);
                     if (code != E_DEC_OK) {

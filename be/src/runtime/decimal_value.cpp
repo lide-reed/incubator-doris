@@ -270,11 +270,6 @@ int DecimalValue::parse_from_str(const char* decimal_str, int32_t length) {
 std::string DecimalValue::to_string(int round_scale) const {
   if (_value == 0) return std::string(1, '0');
 
-  int64_t addr = (int64_t)(&_value);
-  if (addr % 16 != 0) {
-      LOG(INFO) << "_value=" << _value;
-      LOG(INFO) << "### &_value=" << addr;
-  }
 
   int last_char_idx = PRECISION + 2 + (_value < 0);  
   std::string str = std::string(last_char_idx, '0');

@@ -100,11 +100,6 @@ inline void* SlotRef::get_value(Expr* expr, TupleRow* row) {
     if (t == NULL || t->is_null(ref->_null_indicator_offset)) {
         return NULL;
     }
-    void* value = t->get_slot(ref->_slot_offset);
-    int64_t addr = (int64_t)value;
-    if (addr % 16 != 0) {
-        LOG(INFO) << "### &value=" << addr << ", offset=" << ref->_slot_offset << ", tuple=" << t << ", type=" << expr->type().type;
-    }
     return t->get_slot(ref->_slot_offset);
 }
 
@@ -112,12 +107,7 @@ inline void* SlotRef::get_slot(TupleRow* row) {
     //get_slot需要获取slot所在的position,
     //以用于在小批量导入聚合时修改其内容
     Tuple* t = row->get_tuple(_tuple_idx);
-    void* value = t->get_slot(_slot_offset);
-    int64_t addr = (int64_t)value;
-    if (addr % 16 != 0) {
-        LOG(INFO) << "### &value=" << addr << ", offset=" << _slot_offset << ", tuple=" << t;
-    }
-    return value;
+    return t->get_slot(_slot_offset);
 }
 
 inline Tuple* SlotRef::get_tuple(TupleRow* row) {

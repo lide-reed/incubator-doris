@@ -135,16 +135,8 @@ Status ResultWriter::add_one_row(TupleRow* row) {
         }
 
         case TYPE_DECIMAL: {
-            int64_t addr = (int64_t)(item);
-            if (addr % 16 != 0) {
-                LOG(INFO) << "### item=" << addr;
-            }
             DecimalValue value;
             memcpy(&value, item, sizeof(DecimalValue));
-            addr = (int64_t)(&value);
-            if (addr % 16 != 0) {
-                LOG(INFO) << "### decimal_val=" << addr;
-            }
             std::string decimal_str;
             int output_scale = _output_expr_ctxs[i]->root()->output_scale();
 

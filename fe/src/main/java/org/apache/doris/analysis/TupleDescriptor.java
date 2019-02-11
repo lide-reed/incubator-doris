@@ -195,9 +195,6 @@ public class TupleDescriptor {
 
             for (SlotDescriptor d : slotsBySize.get(slotSize)) {
                 d.setByteSize(slotSize);
-                if (d.getType().getPrimitiveType() == PrimitiveType.DECIMAL) {
-                    LOG.info("### offset = {}", offset);
-                }
                 d.setByteOffset(offset);
                 d.setSlotIdx(slotIdx++);
                 offset += slotSize;
