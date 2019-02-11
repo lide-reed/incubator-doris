@@ -253,7 +253,7 @@ void* ExprContext::get_value(TupleRow* row) {
     if (_root->is_slotref()) {
         value = SlotRef::get_value(_root, row);
         if (_root->type().type == TYPE_DECIMAL) {
-            int64_t addr = (int64_t)(&value);
+            int64_t addr = (int64_t)(value);
             if (addr % 16 != 0) {
                 LOG(INFO) << "### value=" << addr;
             }
@@ -261,7 +261,7 @@ void* ExprContext::get_value(TupleRow* row) {
     } else {
         value = get_value(_root, row);
         if (_root->type().type == TYPE_DECIMAL) {
-            int64_t addr = (int64_t)(&value);
+            int64_t addr = (int64_t)(value);
             if (addr % 16 != 0) {
                 LOG(INFO) << "### value=" << addr;
             }
