@@ -103,7 +103,7 @@ inline void* SlotRef::get_value(Expr* expr, TupleRow* row) {
     void* value = t->get_slot(ref->_slot_offset);
     int64_t addr = (int64_t)value;
     if (addr % 16 != 0) {
-        LOG(INFO) << "### &value=" << addr << ", offset=" << ref->_slot_offset << ", tuple=" << t;
+        LOG(INFO) << "### &value=" << addr << ", offset=" << ref->_slot_offset << ", tuple=" << t << ", type=" << _type.type;
     }
     return t->get_slot(ref->_slot_offset);
 }
