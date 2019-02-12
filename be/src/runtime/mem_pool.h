@@ -170,7 +170,7 @@ class MemPool {
   /// For C++/IR interop, we need to be able to look up types by name.
   static const char* LLVM_CLASS_NAME;
 
-  static const int DEFAULT_ALIGNMENT = 8;
+  static const int DEFAULT_ALIGNMENT = 16;
 
  private:
   friend class MemPoolTest;
