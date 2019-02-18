@@ -135,14 +135,15 @@ Status ResultWriter::add_one_row(TupleRow* row) {
         }
 
         case TYPE_DECIMAL: {
-            const DecimalValue* decimal_val = reinterpret_cast<const DecimalValue*>(item);
+            DecimalValue value;
+            memcpy(&value, item, sizeof(DecimalValue));
             std::string decimal_str;
             int output_scale = _output_expr_ctxs[i]->root()->output_scale();
 
             if (output_scale > 0 && output_scale <= 30) {
-                decimal_str = decimal_val->to_string(output_scale);
+                decimal_str = value.to_string(output_scale);
             } else {
-                decimal_str = decimal_val->to_string();
+                decimal_str = value.to_string();
             }
 
             buf_ret = _row_buffer->push_string(decimal_str.c_str(), decimal_str.length());

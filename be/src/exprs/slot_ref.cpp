@@ -516,8 +516,12 @@ DecimalVal SlotRef::get_decimal_val(ExprContext* context, TupleRow* row) {
     if (t == NULL || t->is_null(_null_indicator_offset)) {
         return DecimalVal::null();
     }
+
+    DecimalValue value;
     DecimalVal dec_val;
-    reinterpret_cast<DecimalValue*>(t->get_slot(_slot_offset))->to_decimal_val(&dec_val);
+    memcpy(&value, t->get_slot(_slot_offset), sizeof(DecimalValue));
+    value.to_decimal_val(&dec_val); 
+
     return dec_val;
 }
 
