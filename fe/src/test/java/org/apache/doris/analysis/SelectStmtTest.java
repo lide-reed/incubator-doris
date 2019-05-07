@@ -17,12 +17,7 @@
 
 package org.apache.doris.analysis;
 
-import mockit.Mocked;
-import mockit.internal.startup.Startup;
-import org.apache.doris.mysql.privilege.PaloAuth;
-import org.apache.doris.qe.ConnectContext;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -30,26 +25,6 @@ import java.util.BitSet;
 import java.util.List;
 
 public class SelectStmtTest {
-
-    private Analyzer analyzer;
-
-    @Mocked
-    private PaloAuth auth;
-
-    @Mocked
-    private ConnectContext ctx;
-
-    static {
-        Startup.initializeIfPossible();
-    }
-
-    @Before
-    public void setUp() {
-       //analyzer = AccessTestUtil.fetchAdminAnalyzer(true);
-       //MockedAuth.mockedAuth(auth);
-       //MockedAuth.mockedConnectContext(ctx, "root", "192.168.1.1");
-    }
-
     @Test
     public void testGroupingSets() {
         List<ArrayList<Expr>> groupingExprsList = new ArrayList<>();
