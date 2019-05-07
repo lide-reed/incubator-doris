@@ -17,27 +17,6 @@
 
 package org.apache.doris.analysis;
 
-import org.apache.doris.catalog.Catalog;
-import org.apache.doris.catalog.Column;
-import org.apache.doris.catalog.Database;
-import org.apache.doris.catalog.OlapTable;
-import org.apache.doris.catalog.PrimitiveType;
-import org.apache.doris.catalog.Table.TableType;
-import org.apache.doris.catalog.Type;
-import org.apache.doris.cluster.ClusterNamespace;
-import org.apache.doris.common.AnalysisException;
-import org.apache.doris.common.ColumnAliasGenerator;
-import org.apache.doris.common.ErrorCode;
-import org.apache.doris.common.ErrorReport;
-import org.apache.doris.common.UserException;
-import org.apache.doris.common.Pair;
-import org.apache.doris.common.TableAliasGenerator;
-import org.apache.doris.common.TreeNode;
-import org.apache.doris.common.util.SqlUtils;
-import org.apache.doris.mysql.privilege.PrivPredicate;
-import org.apache.doris.qe.ConnectContext;
-import org.apache.doris.rewrite.ExprRewriter;
-
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
 import com.google.common.base.Strings;
@@ -45,17 +24,18 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-
+import org.apache.doris.catalog.*;
+import org.apache.doris.catalog.Table.TableType;
+import org.apache.doris.cluster.ClusterNamespace;
+import org.apache.doris.common.*;
+import org.apache.doris.common.util.SqlUtils;
+import org.apache.doris.mysql.privilege.PrivPredicate;
+import org.apache.doris.qe.ConnectContext;
+import org.apache.doris.rewrite.ExprRewriter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Representation of a single select block, including GROUP BY, ORDER BY and HAVING
@@ -103,11 +83,13 @@ public class SelectStmt extends QueryStmt {
         this.colLabels = Lists.newArrayList();
     }
 
+    private List<BitSet> groupingSetList_;
+    
     SelectStmt(
             SelectList selectList,
             FromClause fromClause,
             Expr wherePredicate,
-            ArrayList<Expr> groupingExprs,
+            List<ArrayList<Expr>> groupingExprsList,
             Expr havingPredicate,
             ArrayList<OrderByElement> orderByElements,
             LimitElement limitElement) {
@@ -119,13 +101,14 @@ public class SelectStmt extends QueryStmt {
             fromClause_ = fromClause;
         }
         this.whereClause = wherePredicate;
-        this.groupingExprs = groupingExprs;
+        this.groupingExprs = getGroupingExprs(groupingExprsList);
         this.havingClause = havingPredicate;
 
         this.colLabels = Lists.newArrayList();
         this.havingPred = null;
         this.aggInfo = null;
         this.sortInfo = null;
+        this.groupingSetList_ = getGroupingSetList(groupingExprsList);
     }
 
     protected SelectStmt(SelectStmt other) {
@@ -141,6 +124,7 @@ public class SelectStmt extends QueryStmt {
         analyticInfo = (other.analyticInfo != null) ? other.analyticInfo.clone() : null;
         sqlString_ = (other.sqlString_ != null) ? new String(other.sqlString_) : null;
         baseTblSmap = other.baseTblSmap.clone();
+        groupingSetList_ = other.groupingSetList_;
     }
 
     @Override
@@ -156,6 +140,7 @@ public class SelectStmt extends QueryStmt {
         aggInfo = null;
         analyticInfo = null;
         baseTblSmap.clear();
+        groupingSetList_ = null;
     }
     
     @Override
@@ -1372,6 +1357,53 @@ public class SelectStmt extends QueryStmt {
                 tblRefs.add(tblRef);
             }
         }
+    }
+
+    private ArrayList<Expr> getGroupingExprs(List<ArrayList<Expr>> groupingExprsList) {
+        if (groupingExprsList == null || groupingExprsList.isEmpty()) {
+            return null;
+        }
+
+        Set<Expr> groupingExprSet = new HashSet<>();
+        for(ArrayList<Expr> list: groupingExprsList) {
+           groupingExprSet.addAll(list);
+        }
+
+        return new ArrayList<>(groupingExprSet);
+    }
+
+    private List<BitSet> getGroupingSetList(List<ArrayList<Expr>> groupingExprsList) {
+        if (groupingExprs == null) {
+            return null;
+        }
+
+        // regard as ordinary group by clause
+        if (groupingExprsList.size() <= 1) {
+            return null;
+        }
+
+
+        BitSet bitSetBase = new BitSet();
+        bitSetBase.set(0, groupingExprs.size());
+
+        List<BitSet> groupingSetList = new ArrayList<>();
+        for(ArrayList<Expr> list: groupingExprsList) {
+            BitSet bitSet = new BitSet();
+            for(int i = 0; i < groupingExprs.size(); i++) {
+                bitSet.set(i, list.contains(groupingExprs.get(i)));
+            }
+            if (!bitSet.equals(bitSetBase)) {
+                if (!groupingSetList.contains(bitSet)) {
+                    groupingSetList.add(bitSet);
+                }
+            }
+        }
+
+        return groupingSetList;
+    }
+
+    public List<BitSet> getGroupingSetList() {
+        return groupingSetList_;
     }
 
 }

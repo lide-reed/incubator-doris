@@ -194,12 +194,12 @@ terminal String KW_ADD, KW_ADMIN, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_A
     KW_BACKEND, KW_BACKUP, KW_BETWEEN, KW_BEGIN, KW_BIGINT, KW_BOOLEAN, KW_BOTH, KW_BROKER, KW_BACKENDS, KW_BY,
     KW_CANCEL, KW_CASE, KW_CAST, KW_CHAIN, KW_CHAR, KW_CHARSET, KW_CLUSTER, KW_CLUSTERS,
     KW_COLLATE, KW_COLLATION, KW_COLUMN, KW_COLUMNS, KW_COMMENT, KW_COMMIT, KW_COMMITTED,
-    KW_CONFIG, KW_CONNECTION, KW_CONNECTION_ID, KW_CONSISTENT, KW_COUNT, KW_CREATE, KW_CROSS, KW_CURRENT, KW_CURRENT_USER,
+    KW_CONFIG, KW_CONNECTION, KW_CONNECTION_ID, KW_CONSISTENT, KW_COUNT, KW_CREATE, KW_CROSS, KW_CUBE, KW_CURRENT, KW_CURRENT_USER,
     KW_DATA, KW_DATABASE, KW_DATABASES, KW_DATE, KW_DATETIME, KW_DECIMAL, KW_DECOMMISSION, KW_DEFAULT, KW_DESC, KW_DESCRIBE,
     KW_DELETE, KW_DISTINCT, KW_DISTINCTPC, KW_DISTINCTPCSA, KW_DISTRIBUTED, KW_DISTRIBUTION, KW_BUCKETS, KW_DIV, KW_DOUBLE, KW_DROP, KW_DROPP, KW_DUPLICATE,
     KW_ELSE, KW_END, KW_ENGINE, KW_ENGINES, KW_ENTER, KW_ERRORS, KW_EVENTS, KW_EXISTS, KW_EXPORT, KW_EXTERNAL, KW_EXTRACT,
     KW_FALSE, KW_FOLLOWER, KW_FOLLOWING, KW_FREE, KW_FROM, KW_FIRST, KW_FLOAT, KW_FOR, KW_FORMAT, KW_FRONTEND, KW_FRONTENDS, KW_FULL, KW_FUNCTION,
-    KW_GLOBAL, KW_GRANT, KW_GRANTS, KW_GROUP,
+    KW_GLOBAL, KW_GRANT, KW_GRANTS, KW_GROUP, KW_GROUPING,
     KW_HASH, KW_HAVING, KW_HELP,KW_HLL, KW_HLL_UNION, KW_HUB,
     KW_IDENTIFIED, KW_IF, KW_IN, KW_INDEX, KW_INDEXES, KW_INFILE,
     KW_INNER, KW_INSERT, KW_INT, KW_INTERMEDIATE, KW_INTERVAL, KW_INTO, KW_IS, KW_ISNULL,  KW_ISOLATION,
@@ -219,7 +219,7 @@ terminal String KW_ADD, KW_ADMIN, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_A
     KW_RANDOM, KW_RANGE, KW_READ, KW_RECOVER, KW_REGEXP, KW_RELEASE, KW_RENAME,
     KW_REPAIR, KW_REPEATABLE, KW_REPOSITORY, KW_REPOSITORIES, KW_REPLACE, KW_REPLICA, KW_RESOURCE, KW_RESTORE, KW_RETURNS, KW_REVOKE,
     KW_RIGHT, KW_ROLE, KW_ROLES, KW_ROLLBACK, KW_ROLLUP, KW_ROW, KW_ROWS,
-    KW_SCHEMAS, KW_SELECT, KW_SEMI, KW_SERIALIZABLE, KW_SESSION, KW_SET, KW_SHOW,
+    KW_SCHEMAS, KW_SELECT, KW_SEMI, KW_SERIALIZABLE, KW_SESSION, KW_SET, KW_SETS, KW_SHOW,
     KW_SMALLINT, KW_SNAPSHOT, KW_SONAME, KW_SPLIT, KW_START, KW_STATUS, KW_STORAGE, KW_STRING, 
     KW_SUM, KW_SUPERUSER, KW_SYNC, KW_SYSTEM, 
     KW_TABLE, KW_TABLES, KW_TABLET, KW_TERMINATED, KW_THAN, KW_THEN, KW_TIMESTAMP, KW_TINYINT,
@@ -291,7 +291,7 @@ nonterminal SelectList select_clause, select_list, select_sublist;
 nonterminal SelectListItem select_list_item, star_expr;
 nonterminal Expr expr, non_pred_expr, arithmetic_expr, timestamp_arithmetic_expr, expr_or_default;
 nonterminal LiteralExpr set_expr_or_default;
-nonterminal ArrayList<Expr> expr_list, values, row_value, opt_values;
+nonterminal ArrayList<Expr> distinct_expr_list, expr_list, values, row_value, opt_values;
 nonterminal ArrayList<Expr> func_arg_list;
 nonterminal String select_alias, opt_table_alias;
 nonterminal ArrayList<String> ident_list, opt_using_partition;
@@ -303,7 +303,8 @@ nonterminal Expr where_clause;
 nonterminal Expr where_clause_without_null;
 nonterminal Predicate predicate, between_predicate, comparison_predicate,
   compound_predicate, in_predicate, like_predicate, exists_predicate;
-nonterminal ArrayList<Expr> group_by_clause, opt_partition_by_clause;
+nonterminal ArrayList<Expr> opt_partition_by_clause, grouping_set;
+nonterminal List<ArrayList<Expr>> group_by_clause, grouping_sets, group_by_items;
 nonterminal Expr having_clause;
 nonterminal ArrayList<OrderByElement> order_by_elements, order_by_clause;
 nonterminal OrderByElement order_by_element;
@@ -3099,8 +3100,86 @@ where_clause_without_null ::=
   {: RESULT = e; :}
   ;
 
+distinct_expr_list ::=
+  column_ref:e
+  {:
+    ArrayList<Expr> list = new ArrayList<Expr>();
+    list.add(e);
+    RESULT = list;
+  :}
+  | distinct_expr_list:list COMMA expr:e
+  {:
+    if (!list.contains(e)) list.add(e);
+    RESULT = list;
+  :}
+  ;
+
+grouping_set ::=
+  LPAREN RPAREN
+  {: 
+    ArrayList<Expr> list = Lists.newArrayList();
+    RESULT = list; 
+  :}
+  | LPAREN distinct_expr_list:l RPAREN
+  {: RESULT = l; :}
+  ;
+
+grouping_sets ::=
+  grouping_set:l
+  {:
+    List<ArrayList<Expr>> list = Lists.newArrayList();
+    list.add(l);
+    RESULT = list;
+  :}
+  | grouping_sets:list COMMA grouping_set:l
+  {:
+    list.add(l);
+    RESULT = list;
+  :}
+  ;
+
+group_by_items ::=
+  expr_list:l
+  {: 
+    List<ArrayList<Expr>> list = Lists.newArrayList();
+    list.add(l);
+    RESULT = list; 
+  :}
+  | KW_GROUPING KW_SETS LPAREN grouping_sets:l RPAREN
+  {: RESULT = l; :}
+  | KW_CUBE LPAREN distinct_expr_list:l RPAREN
+  {: 
+    List<ArrayList<Expr>> list = Lists.newArrayList();
+    int size = l.size() == 0 ? 0 : 1 << (l.size());
+    for (int i = 0; i < size; i++) {
+        ArrayList<Expr> exprList = new ArrayList<Expr>();
+        int k = i;
+        for (int j = 0; j < l.size(); j++) {
+            if ((k & 1) == 1) {
+                exprList.add(l.get(j));
+            }
+            k >>= 1;
+        }
+        list.add(exprList);
+    }
+    RESULT = list; 
+  :}
+  | KW_ROLLUP LPAREN distinct_expr_list:l RPAREN
+  {: 
+    List<ArrayList<Expr>> list = Lists.newArrayList();
+    for (int i = 0; i <= l.size(); i++) {
+        ArrayList<Expr> exprList = new ArrayList<Expr>();
+        for (int j = 0; j < i; j++) {
+            exprList.add(l.get(j));
+        }
+        list.add(exprList);
+    }
+    RESULT = list; 
+  :}
+  ;
+
 group_by_clause ::=
-  KW_GROUP KW_BY expr_list:l
+  KW_GROUP KW_BY group_by_items:l
   {: RESULT = l; :}
   | /* empty */
   {: RESULT = null; :}
