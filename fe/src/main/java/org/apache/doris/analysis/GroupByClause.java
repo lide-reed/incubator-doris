@@ -89,6 +89,7 @@ public class GroupByClause implements ParseNode {
             }
         }
 
+        boolean isSimpleGroupBy = isSimpleGroupBy();
         for (Expr groupingExpr : groupingExprs) {
             groupingExpr.analyze(analyzer);
             if (groupingExpr.contains(Expr.isAggregatePredicate())) {
@@ -109,8 +110,28 @@ public class GroupByClause implements ParseNode {
                         "GROUP BY expression must not contain hll column: "
                                 + groupingExpr.toSql());
             }
+
+            // only support column or column reference in composed GroupBy clause
+            if(isSimpleGroupBy) {
+                if (!(groupingExpr instanceof SlotRef)) {
+                    throw new AnalysisException(groupingType.toString() +
+                            "expression must be column or column reference: "
+                                    + groupingExpr.toSql());
+                }
+            }
         }
         analyzed_ = true;
+    }
+
+    private boolean isSimpleGroupBy() {
+        if (groupingType == GroupingType.GROUP_BY) {
+            return true;
+        }
+
+        if (groupingType == GroupingType.GROUPING_SETS ||
+                groupingSetList == null || groupingSetList.size() <= 1) {
+            return true;
+        }
     }
 
     @Override
@@ -171,6 +192,7 @@ public class GroupByClause implements ParseNode {
         return strBuilder.toString();
     }
 
+    @Override
     public GroupByClause clone() {
         return new GroupByClause(this);
     }
