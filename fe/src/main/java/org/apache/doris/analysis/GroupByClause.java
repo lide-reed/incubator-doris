@@ -128,10 +128,12 @@ public class GroupByClause implements ParseNode {
             return true;
         }
 
-        if (groupingType == GroupingType.GROUPING_SETS ||
-                groupingSetList == null || groupingSetList.size() <= 1) {
+        if (groupingType == GroupingType.GROUPING_SETS &&
+                groupingSetList != null && groupingSetList.size() <= 1) {
             return true;
         }
+        
+        return false;
     }
 
     @Override
