@@ -17,6 +17,27 @@
 
 package org.apache.doris.analysis;
 
+import org.apache.doris.catalog.Catalog;
+import org.apache.doris.catalog.Column;
+import org.apache.doris.catalog.Database;
+import org.apache.doris.catalog.OlapTable;
+import org.apache.doris.catalog.PrimitiveType;
+import org.apache.doris.catalog.Table.TableType;
+import org.apache.doris.catalog.Type;
+import org.apache.doris.cluster.ClusterNamespace;
+import org.apache.doris.common.AnalysisException;
+import org.apache.doris.common.ColumnAliasGenerator;
+import org.apache.doris.common.ErrorCode;
+import org.apache.doris.common.ErrorReport;
+import org.apache.doris.common.UserException;
+import org.apache.doris.common.Pair;
+import org.apache.doris.common.TableAliasGenerator;
+import org.apache.doris.common.TreeNode;
+import org.apache.doris.common.util.SqlUtils;
+import org.apache.doris.mysql.privilege.PrivPredicate;
+import org.apache.doris.qe.ConnectContext;
+import org.apache.doris.rewrite.ExprRewriter;
+
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
 import com.google.common.base.Strings;
@@ -24,18 +45,17 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import org.apache.doris.catalog.*;
-import org.apache.doris.catalog.Table.TableType;
-import org.apache.doris.cluster.ClusterNamespace;
-import org.apache.doris.common.*;
-import org.apache.doris.common.util.SqlUtils;
-import org.apache.doris.mysql.privilege.PrivPredicate;
-import org.apache.doris.qe.ConnectContext;
-import org.apache.doris.rewrite.ExprRewriter;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Representation of a single select block, including GROUP BY, ORDER BY and HAVING
@@ -50,7 +70,7 @@ public class SelectStmt extends QueryStmt {
     protected SelectList selectList;
     private final ArrayList<String> colLabels; // lower case column labels
     protected final FromClause fromClause_;
-    protected ArrayList<Expr>   groupingExprs;
+    protected GroupByClause groupByClause;
     private List<Expr> originalExpr;
     //
     private Expr havingClause;  // original having clause
@@ -83,13 +103,11 @@ public class SelectStmt extends QueryStmt {
         this.colLabels = Lists.newArrayList();
     }
 
-    private List<BitSet> groupingSetList_;
-    
     SelectStmt(
             SelectList selectList,
             FromClause fromClause,
             Expr wherePredicate,
-            List<ArrayList<Expr>> groupingExprsList,
+            GroupByClause groupByClause,
             Expr havingPredicate,
             ArrayList<OrderByElement> orderByElements,
             LimitElement limitElement) {
@@ -101,14 +119,13 @@ public class SelectStmt extends QueryStmt {
             fromClause_ = fromClause;
         }
         this.whereClause = wherePredicate;
-        this.groupingExprs = getGroupingExprs(groupingExprsList);
+        this.groupByClause = groupByClause;
         this.havingClause = havingPredicate;
 
         this.colLabels = Lists.newArrayList();
         this.havingPred = null;
         this.aggInfo = null;
         this.sortInfo = null;
-        this.groupingSetList_ = getGroupingSetList(groupingExprsList);
     }
 
     protected SelectStmt(SelectStmt other) {
@@ -116,7 +133,7 @@ public class SelectStmt extends QueryStmt {
         selectList = other.selectList.clone();
         fromClause_ = other.fromClause_.clone();
         whereClause = (other.whereClause != null) ? other.whereClause.clone() : null;
-        groupingExprs = (other.groupingExprs != null) ? Expr.cloneAndResetList(other.groupingExprs) : null;
+        groupByClause = (other.groupByClause != null) ? other.groupByClause.clone() : null;
         havingClause = (other.havingClause != null) ? other.havingClause.clone() : null;
 
         colLabels = Lists.newArrayList(other.colLabels);
@@ -124,7 +141,6 @@ public class SelectStmt extends QueryStmt {
         analyticInfo = (other.analyticInfo != null) ? other.analyticInfo.clone() : null;
         sqlString_ = (other.sqlString_ != null) ? new String(other.sqlString_) : null;
         baseTblSmap = other.baseTblSmap.clone();
-        groupingSetList_ = other.groupingSetList_;
     }
 
     @Override
@@ -134,13 +150,12 @@ public class SelectStmt extends QueryStmt {
         colLabels.clear();
         fromClause_.reset();
         if (whereClause != null) whereClause.reset();
-        if (groupingExprs != null) Expr.resetList(groupingExprs);
+        if (groupByClause != null) groupByClause.reset();
         if (havingClause != null) havingClause.reset();
         havingPred = null;
         aggInfo = null;
         analyticInfo = null;
         baseTblSmap.clear();
-        groupingSetList_ = null;
     }
     
     @Override
@@ -355,6 +370,11 @@ public class SelectStmt extends QueryStmt {
         }
 
         createSortInfo(analyzer);
+
+        if (groupByClause != null) {
+            groupByClause.analyze(analyzer);
+        }
+
         analyzeAggregation(analyzer);
         createAnalyticInfo(analyzer);
         if (evaluateOrderBy) {
@@ -749,7 +769,7 @@ public class SelectStmt extends QueryStmt {
             }
         }
 
-        if (groupingExprs == null && !selectList.isDistinct()
+        if (groupByClause == null && !selectList.isDistinct()
                 && !TreeNode.contains(resultExprs, Expr.isAggregatePredicate())
                 && (havingPred == null || !havingPred.contains(Expr.isAggregatePredicate()))
                 && (sortInfo == null || !TreeNode.contains(sortInfo.getOrderingExprs(),
@@ -765,7 +785,7 @@ public class SelectStmt extends QueryStmt {
             throw new AnalysisException("Aggregation without a FROM clause is not allowed");
         }
 
-        if (selectList.isDistinct() && groupingExprs == null) {
+        if (selectList.isDistinct() && groupByClause == null) {
             List<Expr> aggregateExpr = Lists.newArrayList();
             TreeNode.collect(resultExprs, Expr.isAggregatePredicate(), aggregateExpr);
             if (aggregateExpr.size() == resultExprs.size()) {
@@ -774,65 +794,10 @@ public class SelectStmt extends QueryStmt {
         }
 
         if (selectList.isDistinct()
-                && (groupingExprs != null
+                && (groupByClause != null
                     || TreeNode.contains(resultExprs, Expr.isAggregatePredicate())
                     || (havingPred != null && havingPred.contains(Expr.isAggregatePredicate())))) {
             throw new AnalysisException("cannot combine SELECT DISTINCT with aggregate functions or GROUP BY");
-        }
-
-        // disallow '*' and explicit GROUP BY (we can't group by '*', and if you need to
-        // name all star-expanded cols in the group by clause you might as well do it
-        // in the select list)
-        if (groupingExprs != null ||
-                TreeNode.contains(resultExprs, Expr.isAggregatePredicate())) {
-            for (SelectListItem item : selectList.getItems()) {
-                if (item.isStar()) {
-                    throw new AnalysisException(
-                      "cannot combine '*' in select list with GROUP BY: " + item.toSql());
-                }
-            }
-        }
-
-        // disallow subqueries in the GROUP BY clause
-        if (groupingExprs != null) {
-            for (Expr expr: groupingExprs) {
-                if (expr.contains(Predicates.instanceOf(Subquery.class))) {
-                    throw new AnalysisException(
-                            "Subqueries are not supported in the GROUP BY clause.");
-                }
-            }
-        }
-
-        // analyze grouping exprs
-        ArrayList<Expr> groupingExprsCopy = Lists.newArrayList();
-        if (groupingExprs != null) {
-            // make a deep copy here, we don't want to modify the original
-            // exprs during analysis (in case we need to print them later)
-            groupingExprsCopy = Expr.cloneList(groupingExprs);
-
-            substituteOrdinalsAliases(groupingExprsCopy, "GROUP BY", analyzer);
-
-            for (int i = 0; i < groupingExprsCopy.size(); ++i) {
-                groupingExprsCopy.get(i).analyze(analyzer);
-                if (groupingExprsCopy.get(i).contains(Expr.isAggregatePredicate())) {
-                    // reference the original expr in the error msg
-                    throw new AnalysisException(
-                            "GROUP BY expression must not contain aggregate functions: "
-                                    + groupingExprs.get(i).toSql());
-                }
-                if (groupingExprsCopy.get(i).contains(AnalyticExpr.class)) {
-                    // reference the original expr in the error msg
-                    throw new AnalysisException(
-                            "GROUP BY expression must not contain analytic expressions: "
-                                    + groupingExprsCopy.get(i).toSql());
-                }
-
-                if (groupingExprsCopy.get(i).type.isHllType()) {
-                    throw new AnalysisException(
-                            "GROUP BY expression must not contain hll column: "
-                            + groupingExprsCopy.get(i).toSql());
-                }
-            }
         }
 
         // Collect the aggregate expressions from the SELECT, HAVING and ORDER BY clauses
@@ -872,6 +837,14 @@ public class SelectStmt extends QueryStmt {
                 Expr.substituteList(aggExprs, countAllMap, analyzer, false);
         aggExprs.clear();
         TreeNode.collect(substitutedAggs, Expr.isAggregatePredicate(), aggExprs);
+
+        ArrayList<Expr> groupingExprsCopy = Lists.newArrayList();
+        if (groupByClause != null) {
+            // make a deep copy here, we don't want to modify the original
+            // exprs during analysis (in case we need to print them later)
+            groupingExprsCopy = Expr.cloneList(groupByClause.getGroupingExprs());
+            substituteOrdinalsAliases(groupingExprsCopy, "GROUP BY", analyzer);
+        }
         createAggInfo(groupingExprsCopy, aggExprs, analyzer);
 
         // combine avg smap with the one that produces the final agg output
@@ -1039,7 +1012,7 @@ public class SelectStmt extends QueryStmt {
             throws AnalysisException {
         ExprSubstitutionMap scalarCountAllMap = new ExprSubstitutionMap();
 
-        if (groupingExprs != null && !groupingExprs.isEmpty()) {
+        if (groupByClause != null && !groupByClause.isEmpty()) {
             // There are grouping expressions, so no substitution needs to be done.
             return scalarCountAllMap;
         }
@@ -1170,6 +1143,7 @@ public class SelectStmt extends QueryStmt {
         if (havingClause != null) {
             havingClause = rewriter.rewrite(havingClause, analyzer);
         }
+        ArrayList<Expr> groupingExprs = groupByClause.getGroupingExprs();
         if (groupingExprs != null) rewriter.rewriteList(groupingExprs, analyzer);
         if (orderByElements != null) {
             for (OrderByElement orderByElem: orderByElements) {
@@ -1212,12 +1186,9 @@ public class SelectStmt extends QueryStmt {
             strBuilder.append(whereClause.toSql());
         }
         // Group By clause
-        if (groupingExprs != null) {
+        if (groupByClause != null) {
             strBuilder.append(" GROUP BY ");
-            for (int i = 0; i < groupingExprs.size(); ++i) {
-                strBuilder.append(groupingExprs.get(i).toSql());
-                strBuilder.append((i + 1 != groupingExprs.size()) ? ", " : "");
-            }
+            strBuilder.append(groupByClause.toSql());
         }
         // Having clause
         if (havingClause != null) {
@@ -1305,8 +1276,8 @@ public class SelectStmt extends QueryStmt {
             }
         }
         // substitute group by
-        if (groupingExprs != null) {
-            substituteOrdinalsAliases(groupingExprs, "GROUP BY", analyzer);
+        if (groupByClause != null) {
+            substituteOrdinalsAliases(groupByClause.getGroupingExprs(), "GROUP BY", analyzer);
         }
         // substitute having
         if (havingClause != null) {
@@ -1325,7 +1296,7 @@ public class SelectStmt extends QueryStmt {
 
     public boolean hasWhereClause() { return whereClause != null; }
     public boolean hasAggInfo() { return aggInfo != null; }
-    public boolean hasGroupByClause() { return groupingExprs != null; }
+    public boolean hasGroupByClause() { return groupByClause != null; }
     /**
      * Check if the stmt returns a single row. This can happen
      * in the following cases:
@@ -1357,53 +1328,6 @@ public class SelectStmt extends QueryStmt {
                 tblRefs.add(tblRef);
             }
         }
-    }
-
-    private ArrayList<Expr> getGroupingExprs(List<ArrayList<Expr>> groupingExprsList) {
-        if (groupingExprsList == null || groupingExprsList.isEmpty()) {
-            return null;
-        }
-
-        Set<Expr> groupingExprSet = new HashSet<>();
-        for(ArrayList<Expr> list: groupingExprsList) {
-           groupingExprSet.addAll(list);
-        }
-
-        return new ArrayList<>(groupingExprSet);
-    }
-
-    private List<BitSet> getGroupingSetList(List<ArrayList<Expr>> groupingExprsList) {
-        if (groupingExprs == null) {
-            return null;
-        }
-
-        // regard as ordinary group by clause
-        if (groupingExprsList.size() <= 1) {
-            return null;
-        }
-
-
-        BitSet bitSetBase = new BitSet();
-        bitSetBase.set(0, groupingExprs.size());
-
-        List<BitSet> groupingSetList = new ArrayList<>();
-        for(ArrayList<Expr> list: groupingExprsList) {
-            BitSet bitSet = new BitSet();
-            for(int i = 0; i < groupingExprs.size(); i++) {
-                bitSet.set(i, list.contains(groupingExprs.get(i)));
-            }
-            if (!bitSet.equals(bitSetBase)) {
-                if (!groupingSetList.contains(bitSet)) {
-                    groupingSetList.add(bitSet);
-                }
-            }
-        }
-
-        return groupingSetList;
-    }
-
-    public List<BitSet> getGroupingSetList() {
-        return groupingSetList_;
     }
 
 }

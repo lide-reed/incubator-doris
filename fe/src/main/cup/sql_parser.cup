@@ -28,6 +28,7 @@ import org.apache.doris.catalog.Type;
 import org.apache.doris.catalog.View;
 import org.apache.doris.catalog.AggregateType;
 import org.apache.doris.analysis.PartitionKeyDesc;
+import org.apache.doris.analysis.GroupByClause;
 import org.apache.doris.analysis.UnionStmt.UnionOperand;
 import org.apache.doris.analysis.UnionStmt.Qualifier;
 import org.apache.doris.mysql.MysqlPassword;
@@ -291,7 +292,7 @@ nonterminal SelectList select_clause, select_list, select_sublist;
 nonterminal SelectListItem select_list_item, star_expr;
 nonterminal Expr expr, non_pred_expr, arithmetic_expr, timestamp_arithmetic_expr, expr_or_default;
 nonterminal LiteralExpr set_expr_or_default;
-nonterminal ArrayList<Expr> distinct_expr_list, expr_list, values, row_value, opt_values;
+nonterminal ArrayList<Expr> expr_list, values, row_value, opt_values;
 nonterminal ArrayList<Expr> func_arg_list;
 nonterminal String select_alias, opt_table_alias;
 nonterminal ArrayList<String> ident_list, opt_using_partition;
@@ -304,7 +305,7 @@ nonterminal Expr where_clause_without_null;
 nonterminal Predicate predicate, between_predicate, comparison_predicate,
   compound_predicate, in_predicate, like_predicate, exists_predicate;
 nonterminal ArrayList<Expr> opt_partition_by_clause, grouping_set;
-nonterminal List<ArrayList<Expr>> group_by_clause, grouping_sets, group_by_items;
+nonterminal List<ArrayList<Expr>> grouping_set_list;
 nonterminal Expr having_clause;
 nonterminal ArrayList<OrderByElement> order_by_elements, order_by_clause;
 nonterminal OrderByElement order_by_element;
@@ -339,6 +340,7 @@ nonterminal ArrayList<String> opt_plan_hints;
 nonterminal ArrayList<String> opt_sort_hints;
 nonterminal Expr sign_chain_expr;
 nonterminal Qualifier union_op;
+nonterminal GroupByClause group_by_clause, grouping_element;
 
 nonterminal ArrayList<PartitionName> opt_partition_name_list, partition_name_list;
 nonterminal PartitionName partition_name;
@@ -2691,13 +2693,13 @@ select_stmt ::=
   | select_clause:selectList
     from_clause:fromClause
     where_clause:wherePredicate
-    group_by_clause:groupingExprs
+    group_by_clause:groupByClause
     having_clause:havingPredicate
     order_by_clause:orderByClause
     limit_clause:limitClause
   {:
     RESULT = new SelectStmt(selectList, fromClause, wherePredicate,
-                            groupingExprs, havingPredicate, orderByClause,
+                            groupByClause, havingPredicate, orderByClause,
                             limitClause);
   :}
   | value_clause:valueClause order_by_clause:orderByClause limit_clause:limitClause
@@ -3100,87 +3102,52 @@ where_clause_without_null ::=
   {: RESULT = e; :}
   ;
 
-distinct_expr_list ::=
-  column_ref:e
-  {:
-    ArrayList<Expr> list = new ArrayList<Expr>();
-    list.add(e);
-    RESULT = list;
-  :}
-  | distinct_expr_list:list COMMA expr:e
-  {:
-    if (!list.contains(e)) list.add(e);
-    RESULT = list;
-  :}
-  ;
-
 grouping_set ::=
   LPAREN RPAREN
   {: 
     ArrayList<Expr> list = Lists.newArrayList();
     RESULT = list; 
   :}
-  | LPAREN distinct_expr_list:l RPAREN
+  | LPAREN expr_list:l RPAREN
   {: RESULT = l; :}
   ;
 
-grouping_sets ::=
+grouping_set_list ::=
   grouping_set:l
   {:
     List<ArrayList<Expr>> list = Lists.newArrayList();
     list.add(l);
     RESULT = list;
   :}
-  | grouping_sets:list COMMA grouping_set:l
+  | grouping_set_list:list COMMA grouping_set:l
   {:
     list.add(l);
     RESULT = list;
   :}
   ;
 
-group_by_items ::=
+grouping_element ::=
   expr_list:l
   {: 
-    List<ArrayList<Expr>> list = Lists.newArrayList();
-    list.add(l);
-    RESULT = list; 
+    RESULT = new GroupByClause(l, GroupByClause.GroupingType.GROUP_BY); 
   :}
-  | KW_GROUPING KW_SETS LPAREN grouping_sets:l RPAREN
-  {: RESULT = l; :}
-  | KW_CUBE LPAREN distinct_expr_list:l RPAREN
+  | KW_GROUPING KW_SETS LPAREN grouping_set_list:l RPAREN
   {: 
-    List<ArrayList<Expr>> list = Lists.newArrayList();
-    int size = l.size() == 0 ? 0 : 1 << (l.size());
-    for (int i = 0; i < size; i++) {
-        ArrayList<Expr> exprList = new ArrayList<Expr>();
-        int k = i;
-        for (int j = 0; j < l.size(); j++) {
-            if ((k & 1) == 1) {
-                exprList.add(l.get(j));
-            }
-            k >>= 1;
-        }
-        list.add(exprList);
-    }
-    RESULT = list; 
+    RESULT = new GroupByClause(l, GroupByClause.GroupingType.GROUPING_SETS); 
   :}
-  | KW_ROLLUP LPAREN distinct_expr_list:l RPAREN
+  | KW_CUBE LPAREN expr_list:l RPAREN
   {: 
-    List<ArrayList<Expr>> list = Lists.newArrayList();
-    for (int i = 0; i <= l.size(); i++) {
-        ArrayList<Expr> exprList = new ArrayList<Expr>();
-        for (int j = 0; j < i; j++) {
-            exprList.add(l.get(j));
-        }
-        list.add(exprList);
-    }
-    RESULT = list; 
+    RESULT = new GroupByClause(l, GroupByClause.GroupingType.CUBE); 
+  :}
+  | KW_ROLLUP LPAREN expr_list:l RPAREN
+  {: 
+    RESULT = new GroupByClause(l, GroupByClause.GroupingType.ROLLUP); 
   :}
   ;
 
 group_by_clause ::=
-  KW_GROUP KW_BY group_by_items:l
-  {: RESULT = l; :}
+  KW_GROUP KW_BY grouping_element:e
+  {: RESULT = e; :}
   | /* empty */
   {: RESULT = null; :}
   ;

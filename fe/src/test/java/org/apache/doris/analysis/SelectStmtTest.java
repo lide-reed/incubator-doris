@@ -20,9 +20,7 @@ package org.apache.doris.analysis;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.ArrayList;
-import java.util.BitSet;
-import java.util.List;
+import java.util.*;
 
 public class SelectStmtTest {
     @Test
@@ -44,69 +42,79 @@ public class SelectStmtTest {
             groupingExprsList.add(exprList);
         }
 
-        SelectStmt selectStmt = new SelectStmt(null, null, null, groupingExprsList, null, null, null);
-        List<BitSet> bitSetList = selectStmt.getGroupingSetList();
+        GroupByClause groupByClause = new GroupByClause(groupingExprsList, GroupByClause.GroupingType.GROUPING_SETS);
+        List<BitSet> bitSetList = groupByClause.getGroupingIDBitSetList();
 
-        String[] result = {"{1, 3}", "{0, 3}", "{2}"};
-
-        for(int i = 0; i < bitSetList.size(); i++) {
-            String s = bitSetList.get(i).toString();
-            Assert.assertEquals(result[i], s);
+        String[] answer = {"{1, 3}", "{0, 3}", "{2}"};
+        Set<String> answerSet = new HashSet<String>(Arrays.asList(answer));
+        Set<String> resultSet = new HashSet<>();
+        for (BitSet aBitSetList : bitSetList) {
+            String s = aBitSetList.toString();
+            resultSet.add(s);
         }
+
+        Assert.assertEquals(answerSet, resultSet);
     }
 
     @Test
     public void testRollUp() {
-        List<ArrayList<Expr>> groupingExprsList = new ArrayList<>();
-        String[] cols = {"k2", "k3", "k4"};
-        for (int i = 0; i <= cols.length; i++) {
-            ArrayList<Expr> exprList = new ArrayList<Expr>();
-            for (int j = 0; j < i; j++) {
-                Expr expr = new SlotRef(new TableName("testdb", "t"), cols[j]);
-                exprList.add(expr);
-            }
-            groupingExprsList.add(exprList);
+        ArrayList<Expr> groupingExprs = new ArrayList<>();
+        String[] cols = {"k2", "k3", "k4", "k3"};
+        for (String col : cols) {
+            Expr expr = new SlotRef(new TableName("testdb", "t"), col);
+            groupingExprs.add(expr);
         }
 
-        SelectStmt selectStmt = new SelectStmt(null, null, null, groupingExprsList, null, null, null);
-        List<BitSet> bitSetList = selectStmt.getGroupingSetList();
+        GroupByClause groupByClause = new GroupByClause(groupingExprs, GroupByClause.GroupingType.ROLLUP);
+        List<BitSet> bitSetList = groupByClause.getGroupingIDBitSetList();
 
-        String[] result = {"{}", "{0}", "{0, 2}"};
-
-        for(int i = 0; i < bitSetList.size(); i++) {
-            String s = bitSetList.get(i).toString();
-            //System.out.println(s);
-            Assert.assertEquals(result[i], s);
+        String[] answer = {"{}", "{0}", "{0, 1}"};
+        Set<String> answerSet = new HashSet<String>(Arrays.asList(answer));
+        Set<String> resultSet = new HashSet<>();
+        for (BitSet aBitSetList : bitSetList) {
+            String s = aBitSetList.toString();
+            resultSet.add(s);
         }
+
+        Assert.assertEquals(answerSet, resultSet);
     }
 
     @Test
     public void testCube() {
-        List<ArrayList<Expr>> groupingExprsList = new ArrayList<>();
-        String[] cols = {"k1", "k2", "k3"};
-        int size = cols.length == 0 ? 0 : 1 << (cols.length);
-        for (int i = 0; i < size; i++) {
-            ArrayList<Expr> exprList = new ArrayList<Expr>();
-            int k = i;
-            for (int j = 0; j < cols.length; j++) {
-                if ((k & 1) == 1) {
-                    Expr expr = new SlotRef(new TableName("testdb", "t"), cols[j]);
-                    exprList.add(expr);
-                }
-                k >>= 1;
-            }
-            groupingExprsList.add(exprList);
+        ArrayList<Expr> groupingExprs = new ArrayList<>();
+        String[] cols = {"k1", "k2", "k3", "k1"};
+        for (String col : cols) {
+            Expr expr = new SlotRef(new TableName("testdb", "t"), col);
+            groupingExprs.add(expr);
         }
 
-        SelectStmt selectStmt = new SelectStmt(null, null, null, groupingExprsList, null, null, null);
-        List<BitSet> bitSetList = selectStmt.getGroupingSetList();
+        GroupByClause groupByClause = new GroupByClause(groupingExprs, GroupByClause.GroupingType.CUBE);
+        List<BitSet> bitSetList = groupByClause.getGroupingIDBitSetList();
 
-        String[] result = {"{}", "{1}", "{0}", "{0, 1}", "{2}", "{1, 2}", "{0, 2}"};
-
-        for(int i = 0; i < bitSetList.size(); i++) {
-            String s = bitSetList.get(i).toString();
-            //System.out.println(s);
-            Assert.assertEquals(result[i], s);
+        String[] answer = {"{}", "{1}", "{0}", "{0, 1}", "{2}", "{1, 2}", "{0, 2}"};
+        Set<String> answerSet = new HashSet<String>(Arrays.asList(answer));
+        Set<String> resultSet = new HashSet<>();
+        for (BitSet aBitSetList : bitSetList) {
+            String s = aBitSetList.toString();
+            resultSet.add(s);
         }
+
+        Assert.assertEquals(answerSet, resultSet);
+    }
+
+    @Test
+    public void testGroupBy() {
+        ArrayList<Expr> groupingExprs = new ArrayList<>();
+        String[] cols = {"k2", "k2", "k3", "k1"};
+        for (String col : cols) {
+            Expr expr = new SlotRef(new TableName("testdb", "t"), col);
+            groupingExprs.add(expr);
+        }
+
+        GroupByClause groupByClause = new GroupByClause(groupingExprs, GroupByClause.GroupingType.GROUP_BY);
+        List<BitSet> bitSetList = groupByClause.getGroupingIDBitSetList();
+
+        Assert.assertEquals(bitSetList, null);
+        Assert.assertEquals(groupByClause.getGroupingExprs(), groupingExprs);
     }
 }
