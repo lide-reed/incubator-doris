@@ -1146,8 +1146,12 @@ public class SelectStmt extends QueryStmt {
         if (havingClause != null) {
             havingClause = rewriter.rewrite(havingClause, analyzer);
         }
-        ArrayList<Expr> groupingExprs = groupByClause.getGroupingExprs();
-        if (groupingExprs != null) rewriter.rewriteList(groupingExprs, analyzer);
+        if (groupByClause != null) {
+            ArrayList<Expr> groupingExprs = groupByClause.getGroupingExprs();
+            if (groupingExprs != null) {
+                rewriter.rewriteList(groupingExprs, analyzer);
+            }
+        }
         if (orderByElements != null) {
             for (OrderByElement orderByElem: orderByElements) {
                 orderByElem.setExpr(rewriter.rewrite(orderByElem.getExpr(), analyzer));
