@@ -112,8 +112,15 @@ public final class AggregateInfo extends AggregateInfoBase {
     // the multi distinct's begin pos  and end pos in groupby exprs
     private ArrayList<Integer> firstIdx_ = Lists.newArrayList();
     private ArrayList<Integer> lastIdx_ = Lists.newArrayList();
+    private List<BitSet> groupingIdList;
 
-    private List<BitSet> groupingSets_;
+    public void setGroupingIdList(List<BitSet> groupingIdList) {
+        this.groupingIdList = groupingIdList;
+    }
+
+    public List<BitSet> getGroupingIdList() {
+        return groupingIdList;
+    }
 
     // C'tor creates copies of groupingExprs and aggExprs.
     private AggregateInfo(ArrayList<Expr> groupingExprs,

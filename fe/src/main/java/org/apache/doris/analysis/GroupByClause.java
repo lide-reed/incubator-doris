@@ -20,7 +20,6 @@ package org.apache.doris.analysis;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
 import org.apache.doris.common.AnalysisException;
-import org.apache.doris.common.UserException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -32,6 +31,12 @@ import java.util.*;
 public class GroupByClause implements ParseNode {
     private final static Logger LOG = LogManager.getLogger(GroupByClause.class);
 
+    // max num of distinct sets in grouping sets clause
+    private final static int MAX_GROUPING_SETS_NUM = 16;
+
+    // max num of distinct expressions
+    private final static int MAX_GROUPING_SETS_EXPRESSION_NUM = 64;
+
     public enum GroupingType {
         GROUP_BY,
         GROUPING_SETS,
@@ -42,7 +47,7 @@ public class GroupByClause implements ParseNode {
     private boolean analyzed_ = false;
     private GroupingType groupingType;
     private ArrayList<Expr> groupingExprs;
-    private List<BitSet> groupingIDBitSetList;
+    private List<BitSet> groupingIdList;
 
     // reserve this info for toSQL
     private List<ArrayList<Expr>> groupingSetList;
@@ -74,12 +79,12 @@ public class GroupByClause implements ParseNode {
     protected GroupByClause(GroupByClause other) {
         this.groupingType = other.groupingType;
         this.groupingExprs = Expr.cloneAndResetList(groupingExprs);
-        this.groupingIDBitSetList = other.groupingIDBitSetList;
+        this.groupingIdList = other.groupingIdList;
         this.groupingSetList = other.groupingSetList;
     }
 
     @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
+    public void analyze(Analyzer analyzer) throws AnalysisException {
         if (analyzed_) return;
         // disallow subqueries in the GROUP BY clause
         for (Expr expr: groupingExprs) {
@@ -89,7 +94,6 @@ public class GroupByClause implements ParseNode {
             }
         }
 
-        boolean isSimpleGroupBy = isSimpleGroupBy();
         for (Expr groupingExpr : groupingExprs) {
             groupingExpr.analyze(analyzer);
             if (groupingExpr.contains(Expr.isAggregatePredicate())) {
@@ -110,16 +114,22 @@ public class GroupByClause implements ParseNode {
                         "GROUP BY expression must not contain hll column: "
                                 + groupingExpr.toSql());
             }
+        }
 
-            // only support column or column reference in composed GroupBy clause
-            if(isSimpleGroupBy) {
-                if (!(groupingExpr instanceof SlotRef)) {
-                    throw new AnalysisException(groupingType.toString() +
-                            "expression must be column or column reference: "
-                                    + groupingExpr.toSql());
-                }
+        if (groupingIdList != null && groupingIdList.size() > MAX_GROUPING_SETS_NUM) {
+            throw new AnalysisException(
+                    "Too many sets in GROUP BY clause, it must be not more than "
+                            + MAX_GROUPING_SETS_NUM);
+        }
+
+        if (!isSimpleGroupBy() && groupingExprs != null) {
+            if (groupingExprs.size() >= MAX_GROUPING_SETS_EXPRESSION_NUM) {
+                throw new AnalysisException(
+                        "Too many expressions in GROUP BY clause, it must be not more than "
+                                + MAX_GROUPING_SETS_EXPRESSION_NUM);
             }
         }
+
         analyzed_ = true;
     }
 
@@ -132,7 +142,7 @@ public class GroupByClause implements ParseNode {
                 groupingSetList != null && groupingSetList.size() <= 1) {
             return true;
         }
-        
+
         return false;
     }
 
@@ -223,7 +233,7 @@ public class GroupByClause implements ParseNode {
         BitSet bitSetBase = new BitSet();
         bitSetBase.set(0, groupingExprs.size());
 
-        groupingIDBitSetList = new ArrayList<>();
+        groupingIdList = new ArrayList<>();
         if (groupingType == GroupingType.CUBE) {
             int size = (1 << groupingExprs.size()) - 1;
             for(int i = 0; i < size; i++) {
@@ -232,13 +242,13 @@ public class GroupByClause implements ParseNode {
                 for(int j = 0; j < s.length(); j++) {
                     bitSet.set(s.length() - j - 1, s.charAt(j) == '1');
                 }
-                groupingIDBitSetList.add(bitSet);
+                groupingIdList.add(bitSet);
             }
         } else if (groupingType == GroupingType.ROLLUP) {
             for(int i = 0; i < groupingExprs.size(); i++) {
                 BitSet bitSet = new BitSet();
                 bitSet.set(0, i);
-                groupingIDBitSetList.add(bitSet);
+                groupingIdList.add(bitSet);
             }
         }
     }
@@ -264,22 +274,34 @@ public class GroupByClause implements ParseNode {
         BitSet bitSetBase = new BitSet();
         bitSetBase.set(0, groupingExprs.size());
 
-        groupingIDBitSetList = new ArrayList<>();
+        groupingIdList = new ArrayList<>();
         for(ArrayList<Expr> list: groupingSetList) {
             BitSet bitSet = new BitSet();
             for(int i = 0; i < groupingExprs.size(); i++) {
                 bitSet.set(i, list.contains(groupingExprs.get(i)));
             }
             if (!bitSet.equals(bitSetBase)) {
-                if (!groupingIDBitSetList.contains(bitSet)) {
-                    groupingIDBitSetList.add(bitSet);
+                if (!groupingIdList.contains(bitSet)) {
+                    groupingIdList.add(bitSet);
                 }
             }
         }
     }
 
-    public List<BitSet> getGroupingIDBitSetList() {
-        return groupingIDBitSetList;
+    public List<BitSet> getGroupingIdList() {
+        return groupingIdList;
+    }
+
+    public static List<Long> convertGroupingId(List<BitSet> bitSetList) {
+        List<Long> groupingIdList = new ArrayList<>();
+        for(BitSet bitSet: bitSetList) {
+            long l = 0L;
+            for (int i = 0; i < bitSet.length(); ++i) {
+                l += bitSet.get(i) ? (1L << i) : 0L;
+            }
+            groupingIdList.add(l);
+        }
+        return groupingIdList;
     }
 }
 

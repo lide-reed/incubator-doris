@@ -17,11 +17,7 @@
 
 package org.apache.doris.planner;
 
-import org.apache.doris.analysis.AggregateInfo;
-import org.apache.doris.analysis.Analyzer;
-import org.apache.doris.analysis.Expr;
-import org.apache.doris.analysis.FunctionCallExpr;
-import org.apache.doris.analysis.SlotId;
+import org.apache.doris.analysis.*;
 //import org.apache.doris.thrift.TAggregateFunctionCall;
 import org.apache.doris.thrift.TExpr;
 import org.apache.doris.thrift.TAggregationNode;
@@ -38,6 +34,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
 
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.List;
 import java.util.Set;
 
@@ -255,6 +252,11 @@ public class AggregationNode extends PlanNode {
                   aggInfo.getIntermediateTupleId().asInt(),
                   aggInfo.getOutputTupleId().asInt(), needsFinalize);
         msg.agg_node.setUse_streaming_preaggregation(useStreamingPreagg);
+        List<BitSet> groupingIdList = aggInfo.getGroupingIdList();
+        if (groupingIdList != null) {
+            List<Long> groupingIds = GroupByClause.convertGroupingId(groupingIdList);
+            msg.agg_node.setGrouping_id_list(groupingIds);
+        }
         List<Expr> groupingExprs = aggInfo.getGroupingExprs();
         if (groupingExprs != null) {
             msg.agg_node.setGrouping_exprs(Expr.treesToThrift(groupingExprs));

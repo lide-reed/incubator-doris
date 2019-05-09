@@ -43,17 +43,27 @@ public class SelectStmtTest {
         }
 
         GroupByClause groupByClause = new GroupByClause(groupingExprsList, GroupByClause.GroupingType.GROUPING_SETS);
-        List<BitSet> bitSetList = groupByClause.getGroupingIDBitSetList();
+        List<BitSet> bitSetList = groupByClause.getGroupingIdList();
 
-        String[] answer = {"{1, 3}", "{0, 3}", "{2}"};
-        Set<String> answerSet = new HashSet<String>(Arrays.asList(answer));
-        Set<String> resultSet = new HashSet<>();
-        for (BitSet aBitSetList : bitSetList) {
-            String s = aBitSetList.toString();
-            resultSet.add(s);
+        {
+            String[] answer = {"{1, 3}", "{0, 3}", "{2}"};
+            Set<String> answerSet = new HashSet<String>(Arrays.asList(answer));
+            Set<String> resultSet = new HashSet<>();
+            for (BitSet aBitSetList : bitSetList) {
+                String s = aBitSetList.toString();
+                resultSet.add(s);
+            }
+            Assert.assertEquals(answerSet, resultSet);
         }
 
-        Assert.assertEquals(answerSet, resultSet);
+        {
+            Long[] answer = {4L, 9L ,10L};
+            Set<Long> answerSet = new HashSet<Long>(Arrays.asList(answer));
+            List<Long> groupingIds = GroupByClause.convertGroupingId(bitSetList);
+            Set<Long> resultSet = new HashSet<>();
+            resultSet.addAll(groupingIds);
+            Assert.assertEquals(answerSet, resultSet);
+        }
     }
 
     @Test
@@ -66,17 +76,27 @@ public class SelectStmtTest {
         }
 
         GroupByClause groupByClause = new GroupByClause(groupingExprs, GroupByClause.GroupingType.ROLLUP);
-        List<BitSet> bitSetList = groupByClause.getGroupingIDBitSetList();
+        List<BitSet> bitSetList = groupByClause.getGroupingIdList();
 
-        String[] answer = {"{}", "{0}", "{0, 1}"};
-        Set<String> answerSet = new HashSet<String>(Arrays.asList(answer));
-        Set<String> resultSet = new HashSet<>();
-        for (BitSet aBitSetList : bitSetList) {
-            String s = aBitSetList.toString();
-            resultSet.add(s);
+        {
+            String[] answer = {"{}", "{0}", "{0, 1}"};
+            Set<String> answerSet = new HashSet<String>(Arrays.asList(answer));
+            Set<String> resultSet = new HashSet<>();
+            for (BitSet aBitSetList : bitSetList) {
+                String s = aBitSetList.toString();
+                resultSet.add(s);
+            }
+            Assert.assertEquals(answerSet, resultSet);
         }
 
-        Assert.assertEquals(answerSet, resultSet);
+        {
+            Long[] answer = {0L, 1L ,3L};
+            Set<Long> answerSet = new HashSet<Long>(Arrays.asList(answer));
+            List<Long> groupingIds = GroupByClause.convertGroupingId(bitSetList);
+            Set<Long> resultSet = new HashSet<>();
+            resultSet.addAll(groupingIds);
+            Assert.assertEquals(answerSet, resultSet);
+        }
     }
 
     @Test
@@ -89,17 +109,28 @@ public class SelectStmtTest {
         }
 
         GroupByClause groupByClause = new GroupByClause(groupingExprs, GroupByClause.GroupingType.CUBE);
-        List<BitSet> bitSetList = groupByClause.getGroupingIDBitSetList();
+        List<BitSet> bitSetList = groupByClause.getGroupingIdList();
 
-        String[] answer = {"{}", "{1}", "{0}", "{0, 1}", "{2}", "{1, 2}", "{0, 2}"};
-        Set<String> answerSet = new HashSet<String>(Arrays.asList(answer));
-        Set<String> resultSet = new HashSet<>();
-        for (BitSet aBitSetList : bitSetList) {
-            String s = aBitSetList.toString();
-            resultSet.add(s);
+        {
+            String[] answer = {"{}", "{1}", "{0}", "{0, 1}", "{2}", "{1, 2}", "{0, 2}"};
+            Set<String> answerSet = new HashSet<String>(Arrays.asList(answer));
+            Set<String> resultSet = new HashSet<>();
+            for (BitSet aBitSetList : bitSetList) {
+                String s = aBitSetList.toString();
+                resultSet.add(s);
+            }
+
+            Assert.assertEquals(answerSet, resultSet);
         }
 
-        Assert.assertEquals(answerSet, resultSet);
+        {
+            Long[] answer = {0L, 1L ,2L, 3L, 4L, 5L, 6L};
+            Set<Long> answerSet = new HashSet<Long>(Arrays.asList(answer));
+            List<Long> groupingIds = GroupByClause.convertGroupingId(bitSetList);
+            Set<Long> resultSet = new HashSet<>();
+            resultSet.addAll(groupingIds);
+            Assert.assertEquals(answerSet, resultSet);
+        }
     }
 
     @Test
@@ -112,7 +143,7 @@ public class SelectStmtTest {
         }
 
         GroupByClause groupByClause = new GroupByClause(groupingExprs, GroupByClause.GroupingType.GROUP_BY);
-        List<BitSet> bitSetList = groupByClause.getGroupingIDBitSetList();
+        List<BitSet> bitSetList = groupByClause.getGroupingIdList();
 
         Assert.assertEquals(bitSetList, null);
         Assert.assertEquals(groupByClause.getGroupingExprs(), groupingExprs);

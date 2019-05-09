@@ -1067,6 +1067,9 @@ public class SelectStmt extends QueryStmt {
             aggInfo = AggregateInfo.create(Expr.cloneList(resultExprs), null, null, analyzer);
         } else {
             aggInfo = AggregateInfo.create(groupingExprs, aggExprs, null, analyzer);
+            if (groupByClause != null) {
+                aggInfo.setGroupingIdList(groupByClause.getGroupingIdList());
+            }
         }
     }
 
