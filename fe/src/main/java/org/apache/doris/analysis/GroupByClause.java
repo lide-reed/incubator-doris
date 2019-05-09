@@ -33,9 +33,10 @@ public class GroupByClause implements ParseNode {
 
     // max num of distinct sets in grouping sets clause
     private final static int MAX_GROUPING_SETS_NUM = 16;
-
     // max num of distinct expressions
     private final static int MAX_GROUPING_SETS_EXPRESSION_NUM = 64;
+    // GROUPING_ID is a fake column
+    private final static String GROUPING__ID = "GROUPING__ID";
 
     public enum GroupingType {
         GROUP_BY,
@@ -218,6 +219,11 @@ public class GroupByClause implements ParseNode {
         return groupingExprs == null || groupingExprs.isEmpty();
     }
 
+    private static void addGroupingIdColumn(ArrayList<Expr> groupingExprs) {
+        Expr expr = new GroupingId(GROUPING__ID);
+        groupingExprs.add(expr);
+    }
+
     // for CUBE or ROLLUP
     private void buildGroupingClause(ArrayList<Expr> groupingExprs, GroupingType groupingType) {
         if (groupingExprs == null || groupingExprs.isEmpty()) {
@@ -251,6 +257,8 @@ public class GroupByClause implements ParseNode {
                 groupingIdList.add(bitSet);
             }
         }
+
+        addGroupingIdColumn(groupingExprs);
     }
 
     // just for GROUPING SETS
@@ -286,6 +294,8 @@ public class GroupByClause implements ParseNode {
                 }
             }
         }
+
+        addGroupingIdColumn(groupingExprs);
     }
 
     public List<BitSet> getGroupingIdList() {
