@@ -57,15 +57,11 @@ public class GroupByClause implements ParseNode {
         this.groupingType = type;
         this.groupingSetList = groupingSetList;
         Preconditions.checkState(type == GroupingType.GROUPING_SETS);
-        buildGroupingClause(groupingSetList);
     }
 
     public GroupByClause(ArrayList<Expr> groupingExprs, GroupingType type) {
         this.groupingType = type;
         this.groupingExprs = groupingExprs;
-        if (type == GroupingType.CUBE || type == GroupingType.ROLLUP) {
-            buildGroupingClause(groupingExprs, type);
-        }
         Preconditions.checkState(type != GroupingType.GROUPING_SETS);
     }
 
@@ -87,6 +83,13 @@ public class GroupByClause implements ParseNode {
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
         if (analyzed_) return;
+
+        if (groupingType == GroupingType.GROUPING_SETS) {
+            buildGroupingClause(groupingSetList);
+        } else if (groupingType == GroupingType.CUBE || groupingType == GroupingType.ROLLUP) {
+            buildGroupingClause(groupingExprs, groupingType);
+        }
+
         // disallow subqueries in the GROUP BY clause
         for (Expr expr: groupingExprs) {
             if (expr.contains(Predicates.instanceOf(Subquery.class))) {
@@ -220,12 +223,12 @@ public class GroupByClause implements ParseNode {
     }
 
     private static void addGroupingIdColumn(ArrayList<Expr> groupingExprs) {
-        Expr expr = new GroupingId(GROUPING__ID);
+        Expr expr = new GroupingId(null, GROUPING__ID);
         groupingExprs.add(expr);
     }
 
     // for CUBE or ROLLUP
-    private void buildGroupingClause(ArrayList<Expr> groupingExprs, GroupingType groupingType) {
+    private void buildGroupingClause(ArrayList<Expr> groupingExprs, GroupingType groupingType) throws AnalysisException {
         if (groupingExprs == null || groupingExprs.isEmpty()) {
             return;
         }
@@ -262,7 +265,7 @@ public class GroupByClause implements ParseNode {
     }
 
     // just for GROUPING SETS
-    private void buildGroupingClause(List<ArrayList<Expr>> groupingSetList) {
+    private void buildGroupingClause(List<ArrayList<Expr>> groupingSetList) throws AnalysisException {
         if (groupingSetList == null || groupingSetList.isEmpty()) {
             return;
         }

@@ -38,7 +38,10 @@ import java.util.List;
 
 public class GroupingId extends Expr {
     private static final Logger LOG = LogManager.getLogger(GroupingId.class);
+    private TableName tblName;
     private String col;
+    // Used in toSql
+    private String label;
 
     // results of analysis slot
     private SlotDescriptor desc;
@@ -48,22 +51,36 @@ public class GroupingId extends Expr {
         super();
     }
 
-    public GroupingId(String col) {
+    public GroupingId(TableName tblName, String col) {
         super();
+        this.tblName = tblName;
         this.col = col;
+        this.label = "`" + col + "`";
         this.type = Type.BIGINT;
+    }
+
+    // C'tor for a "pre-analyzed" ref to slot that doesn't correspond to
+    // a table's column.
+    public GroupingId(SlotDescriptor desc) {
+        super();
+        this.tblName = null;
+        this.col = null;
+        this.desc = desc;
+        this.type = desc.getType();
+        // TODO(zc): label is meaningful
+        this.label = null;
+        if (this.type == Type.CHAR) {
+            this.type = Type.VARCHAR;
+        }
+        analysisDone();
     }
 
     protected GroupingId(GroupingId other) {
         super(other);
+        tblName = other.tblName;
         col = other.col;
+        label = other.label;
         desc = other.desc;
-    }
-
-    public void setDesc(SlotDescriptor desc) {
-        this.desc = desc;
-        this.type = desc.getType();
-        analysisDone();
     }
 
     @Override
@@ -87,6 +104,11 @@ public class GroupingId extends Expr {
         return desc.getId();
     }
 
+    // NOTE: this is used to set tblName to null,
+    // so we can to get the only column name when calling toSql
+    public void setTblName(TableName name) {
+        this.tblName = name;
+    }
 
     @Override
     public void vectorizedAnalyze(Analyzer analyzer) {
@@ -101,34 +123,67 @@ public class GroupingId extends Expr {
 
     @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
+        desc = analyzer.registerColumnRef(tblName, col);
+        type = desc.getType();
+        if (this.type == Type.CHAR) {
+            this.type = Type.VARCHAR;
+        }
+        if (!type.isSupported()) {
+            throw new AnalysisException(
+                    "Unsupported type '" + type.toString() + "' in '" + toSql() + "'.");
+        }
+        numDistinctValues = desc.getStats().getNumDistinctValues();
+        if (type == Type.BOOLEAN) {
+            selectivity = DEFAULT_SELECTIVITY;
+        }
     }
 
     @Override
     public String debugString() {
         ToStringHelper helper = Objects.toStringHelper(this);
+        helper.add("slotDesc", desc != null ? desc.debugString() : "null");
         helper.add("col", col);
-        helper.add("type", type.toSql());
+        helper.add("label", label);
+        helper.add("tblName", tblName != null ? tblName.toSql() : "null");
         return helper.toString();
     }
 
     @Override
     public String toSqlImpl() {
-        if (col != null) {
-            return col;
+        StringBuilder sb = new StringBuilder();
+
+        // if (desc != null) {
+        //     sb.append("[tupleId=");
+        //     sb.append(desc.getParent().getId().asInt());
+        //     sb.append(",SlotId=");
+        //     sb.append(desc.getId().asInt());
+        //     sb.append("]");
+        // }
+        if (tblName != null) {
+            return tblName.toSql() + "." + label + sb.toString();
+        } else if (label != null) {
+            return label + sb.toString();
+        } else {
+            return "<slot " + Integer.toString(desc.getId().asInt()) + ">" + sb.toString();
         }
-        return "";
     }
 
     @Override
     public String toMySql() {
         if (col != null) {
             return col;
+        } else {
+            return "<slot " + Integer.toString(desc.getId().asInt()) + ">";
         }
-        return "";
+    }
+
+    public TableName getTableName() {
+        return tblName;
     }
 
     @Override
     public String toColumnLabel() {
+        // return tblName == null ? col : tblName.getTbl() + "." + col;
         return col;
     }
 
@@ -149,7 +204,7 @@ public class GroupingId extends Expr {
         if (desc != null) {
             return desc.getId().hashCode();
         }
-        return Objects.hashCode(col.toLowerCase());
+        return Objects.hashCode((tblName == null ? "" : tblName.toSql() + "." + label).toLowerCase());
     }
 
     @Override
@@ -162,6 +217,12 @@ public class GroupingId extends Expr {
         // (regardless of how the ref was constructed)
         if (desc != null && other.desc != null) {
             return desc.getId().equals(other.desc.getId());
+        }
+        if ((tblName == null) != (other.tblName == null)) {
+            return false;
+        }
+        if (tblName != null && !tblName.equals(other.tblName)) {
+            return false;
         }
         if ((col == null) != (other.col == null)) {
             return false;
@@ -217,12 +278,22 @@ public class GroupingId extends Expr {
 
     @Override
     public void write(DataOutput out) throws IOException {
+        // TableName
+        if (tblName == null) {
         out.writeBoolean(false);
+        } else {
+            out.writeBoolean(true);
+            tblName.write(out);
+        }
         Text.writeString(out, col);
     }
 
     @Override
     public void readFields(DataInput in) throws IOException {
+        if (in.readBoolean()) {
+            tblName = new TableName();
+            tblName.readFields(in);
+        }
         col = Text.readString(in);
     }
 
