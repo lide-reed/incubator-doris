@@ -34,6 +34,7 @@ public class VirtualSlotRef extends SlotRef {
 
     public VirtualSlotRef(String col, Type type) {
         super(null, col);
+        super.type = type;
     }
 
     // C'tor for a "pre-analyzed" ref to slot that doesn't correspond to
