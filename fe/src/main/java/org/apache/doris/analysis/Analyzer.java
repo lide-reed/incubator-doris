@@ -584,6 +584,24 @@ public class Analyzer {
         return result;
     }
 
+    public SlotDescriptor registerVirtualColumnRef(String colName, Type type) throws AnalysisException {
+        // Make column name case insensitive
+        String key = colName;
+        SlotDescriptor result = slotRefMap.get(key);
+        if (result != null) {
+            result.setMultiRef(true);
+            return result;
+        }
+
+        //TODO(lide) get a TupleDescriptor to avoid null parent
+        result = new SlotDescriptor(SlotId.createGenerator().getNextId(), null);
+        Column col = new Column(colName, type);
+        result.setColumn(col);
+        result.setIsNullable(true);
+        slotRefMap.put(key, result);
+        return result;
+    }
+
     /**
      * Resolves column name in context of any of the registered table aliases.
      * Returns null if not found or multiple bindings to different tables exist,

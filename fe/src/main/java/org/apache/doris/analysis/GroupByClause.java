@@ -19,6 +19,7 @@ package org.apache.doris.analysis;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
+import org.apache.doris.catalog.Type;
 import org.apache.doris.common.AnalysisException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -84,10 +85,35 @@ public class GroupByClause implements ParseNode {
     public void analyze(Analyzer analyzer) throws AnalysisException {
         if (analyzed_) return;
 
-        if (groupingType == GroupingType.GROUPING_SETS) {
-            buildGroupingClause(groupingSetList);
-        } else if (groupingType == GroupingType.CUBE || groupingType == GroupingType.ROLLUP) {
-            buildGroupingClause(groupingExprs, groupingType);
+        if (groupingType == GroupingType.CUBE || groupingType == GroupingType.ROLLUP) {
+            if (groupingExprs == null || groupingExprs.isEmpty()) {
+                throw new AnalysisException(
+                        "The expresions in GROUPING CUBE or ROLLUP can not be empty");
+            }
+            // remove repeated element
+            Set<Expr> groupingExprSet = new HashSet<>();
+            groupingExprSet.addAll(groupingExprs);
+            groupingExprs.clear();
+            groupingExprs.addAll(groupingExprSet);
+
+            buildGroupingClause(analyzer);
+
+        } else if (groupingType == GroupingType.GROUPING_SETS) {
+            if (groupingSetList == null || groupingSetList.isEmpty()) {
+                throw new AnalysisException(
+                        "The expresions in GROUPINGING SETS can not be empty");
+            }
+            // collect all Expr elements
+            Set<Expr> groupingExprSet = new HashSet<>();
+            for(ArrayList<Expr> list: groupingSetList) {
+                groupingExprSet.addAll(list);
+            }
+            groupingExprs = new ArrayList<>(groupingExprSet);
+
+            // regard as ordinary group by clause if less than one expression
+            if (groupingSetList.size() > 1) {
+                buildGroupingClause(analyzer);
+            }
         }
 
         // disallow subqueries in the GROUP BY clause
@@ -222,83 +248,56 @@ public class GroupByClause implements ParseNode {
         return groupingExprs == null || groupingExprs.isEmpty();
     }
 
-    private static void addGroupingIdColumn(ArrayList<Expr> groupingExprs) {
-        Expr expr = new GroupingId(null, GROUPING__ID);
-        groupingExprs.add(expr);
+    private void addGroupingIdColumn(Analyzer analyzer) {
+       Expr expr = new VirtualSlotRef(GROUPING__ID, Type.BIGINT);
+       groupingExprs.add(expr);
     }
 
-    // for CUBE or ROLLUP
-    private void buildGroupingClause(ArrayList<Expr> groupingExprs, GroupingType groupingType) throws AnalysisException {
-        if (groupingExprs == null || groupingExprs.isEmpty()) {
-            return;
-        }
-
-        // remove repeated element
-        Set<Expr> groupingExprSet = new HashSet<>();
-        groupingExprSet.addAll(groupingExprs);
-        groupingExprs.clear();
-        groupingExprs.addAll(groupingExprSet);
-
-        BitSet bitSetBase = new BitSet();
-        bitSetBase.set(0, groupingExprs.size());
-
+    private void buildGroupingClause(Analyzer analyzer) throws AnalysisException {
         groupingIdList = new ArrayList<>();
-        if (groupingType == GroupingType.CUBE) {
-            int size = (1 << groupingExprs.size()) - 1;
-            for(int i = 0; i < size; i++) {
-                String s = Integer.toBinaryString(i);
-                BitSet bitSet = new BitSet();
-                for(int j = 0; j < s.length(); j++) {
-                    bitSet.set(s.length() - j - 1, s.charAt(j) == '1');
-                }
-                groupingIdList.add(bitSet);
-            }
-        } else if (groupingType == GroupingType.ROLLUP) {
-            for(int i = 0; i < groupingExprs.size(); i++) {
-                BitSet bitSet = new BitSet();
-                bitSet.set(0, i);
-                groupingIdList.add(bitSet);
-            }
-        }
-
-        addGroupingIdColumn(groupingExprs);
-    }
-
-    // just for GROUPING SETS
-    private void buildGroupingClause(List<ArrayList<Expr>> groupingSetList) throws AnalysisException {
-        if (groupingSetList == null || groupingSetList.isEmpty()) {
-            return;
-        }
-
-        // collect all Expr elements
-        Set<Expr> groupingExprSet = new HashSet<>();
-        for(ArrayList<Expr> list: groupingSetList) {
-           groupingExprSet.addAll(list);
-        }
-        groupingExprs = new ArrayList<>(groupingExprSet);
-
-        // regard as ordinary group by clause
-        if (groupingSetList.size() <= 1) {
-            return;
-        }
-
-        BitSet bitSetBase = new BitSet();
-        bitSetBase.set(0, groupingExprs.size());
-
-        groupingIdList = new ArrayList<>();
-        for(ArrayList<Expr> list: groupingSetList) {
-            BitSet bitSet = new BitSet();
-            for(int i = 0; i < groupingExprs.size(); i++) {
-                bitSet.set(i, list.contains(groupingExprs.get(i)));
-            }
-            if (!bitSet.equals(bitSetBase)) {
-                if (!groupingIdList.contains(bitSet)) {
+        switch (groupingType) {
+            case CUBE:
+                int size = (1 << groupingExprs.size()) - 1;
+                for(int i = 0; i < size; i++) {
+                    String s = Integer.toBinaryString(i);
+                    BitSet bitSet = new BitSet();
+                    for(int j = 0; j < s.length(); j++) {
+                        bitSet.set(s.length() - j - 1, s.charAt(j) == '1');
+                    }
                     groupingIdList.add(bitSet);
                 }
-            }
-        }
+                break;
 
-        addGroupingIdColumn(groupingExprs);
+            case ROLLUP:
+                for(int i = 0; i < groupingExprs.size(); i++) {
+                    BitSet bitSet = new BitSet();
+                    bitSet.set(0, i);
+                    groupingIdList.add(bitSet);
+                }
+                break;
+
+            case GROUPING_SETS:
+                BitSet bitSetBase = new BitSet();
+                bitSetBase.set(0, groupingExprs.size());
+
+                for(ArrayList<Expr> list: groupingSetList) {
+                    BitSet bitSet = new BitSet();
+                    for(int i = 0; i < groupingExprs.size(); i++) {
+                        bitSet.set(i, list.contains(groupingExprs.get(i)));
+                    }
+                    if (!bitSet.equals(bitSetBase)) {
+                        if (!groupingIdList.contains(bitSet)) {
+                            groupingIdList.add(bitSet);
+                        }
+                    }
+                }
+                break;
+
+            default:
+                Preconditions.checkState(false);
+                return;
+        }
+        addGroupingIdColumn(analyzer);
     }
 
     public List<BitSet> getGroupingIdList() {

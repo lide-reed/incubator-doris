@@ -17,6 +17,7 @@
 
 package org.apache.doris.analysis;
 
+import org.apache.doris.common.AnalysisException;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -43,6 +44,11 @@ public class SelectStmtTest {
         }
 
         GroupByClause groupByClause = new GroupByClause(groupingExprsList, GroupByClause.GroupingType.GROUPING_SETS);
+        try {
+            groupByClause.analyze(null);
+        } catch (AnalysisException execption) {
+            Assert.assertTrue(false);
+        }
         List<BitSet> bitSetList = groupByClause.getGroupingIdList();
 
         {
@@ -76,6 +82,11 @@ public class SelectStmtTest {
         }
 
         GroupByClause groupByClause = new GroupByClause(groupingExprs, GroupByClause.GroupingType.ROLLUP);
+        try {
+            groupByClause.analyze(null);
+        } catch (AnalysisException execption) {
+            Assert.assertTrue(false);
+        }
         List<BitSet> bitSetList = groupByClause.getGroupingIdList();
 
         {
@@ -109,6 +120,11 @@ public class SelectStmtTest {
         }
 
         GroupByClause groupByClause = new GroupByClause(groupingExprs, GroupByClause.GroupingType.CUBE);
+        try {
+            groupByClause.analyze(null);
+        } catch (AnalysisException execption) {
+            Assert.assertTrue(false);
+        }
         List<BitSet> bitSetList = groupByClause.getGroupingIdList();
 
         {
@@ -143,6 +159,11 @@ public class SelectStmtTest {
         }
 
         GroupByClause groupByClause = new GroupByClause(groupingExprs, GroupByClause.GroupingType.GROUP_BY);
+        try {
+            groupByClause.analyze(null);
+        } catch (AnalysisException execption) {
+            Assert.assertTrue(false);
+        }
         List<BitSet> bitSetList = groupByClause.getGroupingIdList();
 
         Assert.assertEquals(bitSetList, null);
