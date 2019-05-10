@@ -30,11 +30,6 @@ import java.io.IOException;
 
 public class VirtualSlotRef extends SlotRef {
     private static final Logger LOG = LogManager.getLogger(VirtualSlotRef.class);
-    private TableName tblName;
-    private String col;
-    // Used in toSql
-    private String label;
-
     // results of analysis slot
     private SlotDescriptor desc;
 
@@ -47,14 +42,17 @@ public class VirtualSlotRef extends SlotRef {
     // a table's column.
     public VirtualSlotRef(SlotDescriptor desc) {
         super(desc);
+        this.desc = desc;
     }
 
     protected VirtualSlotRef(VirtualSlotRef other) {
         super(other);
+        desc = other.desc;
     }
 
     protected VirtualSlotRef(SlotRef other) {
         super(other);
+        desc = other.getDesc();
     }
 
     @Override
@@ -64,19 +62,8 @@ public class VirtualSlotRef extends SlotRef {
 
     @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        desc = analyzer.registerVirtualColumnRef(col, type);
-        type = desc.getType();
-        if (this.type == Type.CHAR) {
-            this.type = Type.VARCHAR;
-        }
-        if (!type.isSupported()) {
-            throw new AnalysisException(
-                    "Unsupported type '" + type.toString() + "' in '" + toSql() + "'.");
-        }
+        desc = analyzer.registerVirtualColumnRef(super.getColumnName(), type);
         numDistinctValues = desc.getStats().getNumDistinctValues();
-        if (type == Type.BOOLEAN) {
-            selectivity = DEFAULT_SELECTIVITY;
-        }
     }
 
     @Override
