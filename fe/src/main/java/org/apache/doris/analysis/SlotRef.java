@@ -44,7 +44,7 @@ public class SlotRef extends Expr {
     private String label;
 
     // results of analysis
-    private SlotDescriptor desc;
+    protected SlotDescriptor desc;
 
     // Only used write
     private SlotRef() {

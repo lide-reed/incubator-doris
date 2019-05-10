@@ -31,28 +31,23 @@ import java.io.IOException;
 public class VirtualSlotRef extends SlotRef {
     private static final Logger LOG = LogManager.getLogger(VirtualSlotRef.class);
     // results of analysis slot
-    private SlotDescriptor desc;
 
     public VirtualSlotRef(String col, Type type) {
         super(null, col);
-        this.type = type;
     }
 
     // C'tor for a "pre-analyzed" ref to slot that doesn't correspond to
     // a table's column.
     public VirtualSlotRef(SlotDescriptor desc) {
         super(desc);
-        this.desc = desc;
     }
 
     protected VirtualSlotRef(VirtualSlotRef other) {
         super(other);
-        desc = other.desc;
     }
 
     protected VirtualSlotRef(SlotRef other) {
         super(other);
-        desc = other.getDesc();
     }
 
     @Override
