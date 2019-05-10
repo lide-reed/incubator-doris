@@ -593,8 +593,8 @@ public class Analyzer {
             return result;
         }
 
-        //TODO(lide) get a TupleDescriptor to avoid null parent
-        result = new SlotDescriptor(SlotId.createGenerator().getNextId(), null);
+        Preconditions.checkState(getDescTbl().getTupleDescs().iterator().hasNext());
+        result = new SlotDescriptor(SlotId.createGenerator().getNextId(), getDescTbl().getTupleDescs().iterator().next());
         Column col = new Column(colName, type);
         result.setColumn(col);
         result.setIsNullable(true);
