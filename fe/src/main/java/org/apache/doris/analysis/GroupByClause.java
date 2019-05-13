@@ -19,7 +19,6 @@ package org.apache.doris.analysis;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
-import org.apache.doris.catalog.Type;
 import org.apache.doris.common.AnalysisException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -124,6 +123,7 @@ public class GroupByClause implements ParseNode {
             }
         }
 
+        //TODO add the analysis for grouping and grouping_id functions
         for (Expr groupingExpr : groupingExprs) {
             groupingExpr.analyze(analyzer);
             if (groupingExpr.contains(Expr.isAggregatePredicate())) {
@@ -152,7 +152,7 @@ public class GroupByClause implements ParseNode {
                             + MAX_GROUPING_SETS_NUM);
         }
 
-        if (!isSimpleGroupBy() && groupingExprs != null) {
+        if (isGroupByExtension() && groupingExprs != null) {
             if (groupingExprs.size() >= MAX_GROUPING_SETS_EXPRESSION_NUM) {
                 throw new AnalysisException(
                         "Too many expressions in GROUP BY clause, it must be not more than "
@@ -163,17 +163,19 @@ public class GroupByClause implements ParseNode {
         analyzed_ = true;
     }
 
-    private boolean isSimpleGroupBy() {
-        if (groupingType == GroupingType.GROUP_BY) {
-            return true;
+    private boolean isGroupByExtension() {
+        if (groupingType != GroupingType.GROUPING_SETS
+                && groupingType != GroupingType.CUBE
+                && groupingType != GroupingType.ROLLUP) {
+            return false;
         }
 
         if (groupingType == GroupingType.GROUPING_SETS &&
                 groupingSetList != null && groupingSetList.size() <= 1) {
-            return true;
+            return false;
         }
 
-        return false;
+        return true;
     }
 
     @Override
@@ -248,9 +250,14 @@ public class GroupByClause implements ParseNode {
         return groupingExprs == null || groupingExprs.isEmpty();
     }
 
-    private void addGroupingIdColumn(Analyzer analyzer) {
-       Expr expr = new VirtualSlotRef(GROUPING__ID, Type.BIGINT);
-       groupingExprs.add(expr);
+    private void addGroupingId(Analyzer analyzer) throws  AnalysisException {
+        List<Expr> params = new ArrayList<>();
+        for(Expr expr: groupingExprs) {
+            params.add(expr);
+        }
+        FunctionCallExpr expr = new FunctionCallExpr(GROUPING__ID, params);
+        expr.analyze(analyzer);
+        groupingExprs.add(expr);
     }
 
     private void buildGroupingClause(Analyzer analyzer) throws AnalysisException {
@@ -297,7 +304,7 @@ public class GroupByClause implements ParseNode {
                 Preconditions.checkState(false);
                 return;
         }
-        addGroupingIdColumn(analyzer);
+        addGroupingId(analyzer);
     }
 
     public List<BitSet> getGroupingIdList() {
