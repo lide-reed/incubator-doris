@@ -44,7 +44,8 @@ enum TPlanNodeType {
   EMPTY_SET_NODE, 
   UNION_NODE,
   ES_SCAN_NODE,
-  ES_HTTP_SCAN_NODE
+  ES_HTTP_SCAN_NODE,
+  GROUPING_SETS_NODE
 }
 
 // phases of an execution node
@@ -348,6 +349,11 @@ struct TAggregationNode {
   7: optional list<i64> grouping_id_list
 }
 
+struct TGroupingSetsNode {
+  1: required list<Exprs.TExpr> grouping_exprs
+  2: required list<i64> grouping_id_list
+}
+
 struct TPreAggregationNode {
   1: required list<Exprs.TExpr> group_exprs
   2: required list<Exprs.TExpr> aggregate_exprs
@@ -570,6 +576,7 @@ struct TPlanNode {
   28: optional TUnionNode union_node
   29: optional TBackendResourceProfile resource_profile
   30: optional TEsScanNode es_scan_node
+  31: optional TGroupingSetsNode grouping_sets_node
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first
