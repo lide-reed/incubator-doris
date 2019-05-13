@@ -17,17 +17,19 @@
 
 package org.apache.doris.analysis;
 
-import com.google.common.base.Objects;
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import org.apache.doris.common.AnalysisException;
 import org.apache.doris.planner.DataPartition;
 import org.apache.doris.thrift.TPartitionType;
+
+import com.google.common.base.Objects;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.BitSet;
+import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -112,15 +114,6 @@ public final class AggregateInfo extends AggregateInfoBase {
     // the multi distinct's begin pos  and end pos in groupby exprs
     private ArrayList<Integer> firstIdx_ = Lists.newArrayList();
     private ArrayList<Integer> lastIdx_ = Lists.newArrayList();
-    private List<BitSet> groupingIdList;
-
-    public void setGroupingIdList(List<BitSet> groupingIdList) {
-        this.groupingIdList = groupingIdList;
-    }
-
-    public List<BitSet> getGroupingIdList() {
-        return groupingIdList;
-    }
 
     // C'tor creates copies of groupingExprs and aggExprs.
     private AggregateInfo(ArrayList<Expr> groupingExprs,
