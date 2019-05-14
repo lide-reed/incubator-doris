@@ -61,7 +61,7 @@ public class RepeatNode extends PlanNode {
         msg.node_type = TPlanNodeType.REPEAT_NODE;
         List<Long> repeatIds = GroupByClause.convertGroupingId(repeatIdList);
         List<TExpr> baseExprList = Expr.treesToThrift(baseExprs);
-        msg.repeat_node = new TGroupingSetsNode(baseExprList, repeatIds);
+        msg.repeat_node = new TRepeatNode(baseExprList, repeatIds);
     }
 
     @Override
