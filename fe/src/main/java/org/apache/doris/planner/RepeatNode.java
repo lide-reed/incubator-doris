@@ -17,17 +17,11 @@
 
 package org.apache.doris.planner;
 
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
-import org.apache.doris.analysis.Analyzer;
-import org.apache.doris.analysis.Expr;
-import org.apache.doris.analysis.GroupByClause;
-import org.apache.doris.analysis.TupleId;
-import org.apache.doris.thrift.TExpr;
-import org.apache.doris.thrift.TGroupingSetsNode;
-import org.apache.doris.thrift.TPlanNode;
-import org.apache.doris.thrift.TPlanNodeType;
+import org.apache.doris.analysis.*;
+import org.apache.doris.thrift.*;
 
-import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
 
@@ -35,14 +29,16 @@ import java.util.List;
  * Used for grouping sets.
  * It will add some new rows and a column of groupingId according to grouping sets info.
  */
-public class GroupingSetsNode extends PlanNode {
+public class RepeatNode extends PlanNode {
 
-    private List<Expr> groupingExprs;
-    private List<BitSet> groupingIdList;
+    private List<Expr> baseExprs;
+    private List<BitSet> repeatIdList;
 
-    public GroupingSetsNode(PlanNodeId id, ArrayList<TupleId> tupleIds) {
-        super(id, tupleIds, "GROUPINGSETS");
-        Preconditions.checkArgument(tupleIds.size() > 0);
+    public RepeatNode(PlanNodeId id, PlanNode input, AggregateInfo aggInfo, List<BitSet> repeatIdList) {
+        super(id, aggInfo.getOutputTupleId().asList(), "REPEATNODE");
+        this.children.add(input);
+        this.baseExprs = aggInfo.getGroupingExprs();
+        this.repeatIdList = repeatIdList;
     }
 
     @Override
@@ -62,10 +58,21 @@ public class GroupingSetsNode extends PlanNode {
 
     @Override
     protected void toThrift(TPlanNode msg) {
-        msg.node_type = TPlanNodeType.GROUPING_SETS_NODE;
-        List<Long> groupingIds = GroupByClause.convertGroupingId(groupingIdList);
-        List<TExpr> groupingExprList = Expr.treesToThrift(groupingExprs);
-        msg.grouping_sets_node = new TGroupingSetsNode(groupingExprList, groupingIds);
+        msg.node_type = TPlanNodeType.REPEAT_NODE;
+        List<Long> repeatIds = GroupByClause.convertGroupingId(repeatIdList);
+        List<TExpr> baseExprList = Expr.treesToThrift(baseExprs);
+        msg.repeat_node = new TGroupingSetsNode(baseExprList, repeatIds);
     }
 
+    @Override
+    protected String debugString() {
+        return Objects.toStringHelper(this).add("Repeat", baseExprs).addValue(
+                super.debugString()).toString();
+    }
+
+    @Override
+    protected String getNodeExplainString(String detailPrefix, TExplainLevel detailLevel) {
+        StringBuilder output = new StringBuilder();
+        return output.toString();
+    }
 }

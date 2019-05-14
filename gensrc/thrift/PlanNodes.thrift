@@ -45,7 +45,7 @@ enum TPlanNodeType {
   UNION_NODE,
   ES_SCAN_NODE,
   ES_HTTP_SCAN_NODE,
-  GROUPING_SETS_NODE
+  REPEAT_NODE
 }
 
 // phases of an execution node
@@ -346,12 +346,11 @@ struct TAggregationNode {
   // rows have been aggregated, and this node is not an intermediate node.
   5: required bool need_finalize
   6: optional bool use_streaming_preaggregation
-  7: optional list<i64> grouping_id_list
 }
 
 struct TGroupingSetsNode {
   1: required list<Exprs.TExpr> grouping_exprs
-  2: required list<i64> grouping_id_list
+  2: required list<i64> repeat_id_list
 }
 
 struct TPreAggregationNode {
@@ -576,7 +575,7 @@ struct TPlanNode {
   28: optional TUnionNode union_node
   29: optional TBackendResourceProfile resource_profile
   30: optional TEsScanNode es_scan_node
-  31: optional TGroupingSetsNode grouping_sets_node
+  31: optional TRepeatNode repeat_node
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

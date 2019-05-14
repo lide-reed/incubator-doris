@@ -668,8 +668,15 @@ public class SingleNodePlanner {
         // add Having clause
         root.assignConjuncts(analyzer);
         Preconditions.checkState(selectStmt.getAggInfo() != null);
-        // add aggregation, if required
+
+        // add grouping sets process, if required
         AggregateInfo aggInfo = selectStmt.getAggInfo();
+        GroupByClause groupByClause = selectStmt.getGroupByClause();
+        if (groupByClause != null) {
+            root = new RepeatNode(ctx_.getNextNodeId(), root, aggInfo, groupByClause.getGroupingIdList());
+        }
+
+        // add aggregation, if required
         PlanNode newRoot = new AggregationNode(ctx_.getNextNodeId(), root, aggInfo);
         newRoot.init(analyzer);
         Preconditions.checkState(newRoot.hasValidStats());

@@ -196,6 +196,10 @@ public class SelectStmt extends QueryStmt {
         return aggInfo;
     }
 
+    public GroupByClause getGroupByClause() {
+        return groupByClause;
+    }
+
     public AnalyticInfo getAnalyticInfo() {
         return analyticInfo;
     }
@@ -1067,9 +1071,6 @@ public class SelectStmt extends QueryStmt {
             aggInfo = AggregateInfo.create(Expr.cloneList(resultExprs), null, null, analyzer);
         } else {
             aggInfo = AggregateInfo.create(groupingExprs, aggExprs, null, analyzer);
-            if (groupByClause != null) {
-                aggInfo.setGroupingIdList(groupByClause.getGroupingIdList());
-            }
         }
     }
 
