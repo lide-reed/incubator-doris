@@ -348,7 +348,7 @@ struct TAggregationNode {
   6: optional bool use_streaming_preaggregation
 }
 
-struct TGroupingSetsNode {
+struct TRepeatNode {
   1: required list<Exprs.TExpr> grouping_exprs
   2: required list<i64> repeat_id_list
 }
