@@ -50,6 +50,7 @@
 #include "exec/analytic_eval_node.h"
 #include "exec/select_node.h"
 #include "exec/union_node.h"
+#include "exec/repeat_node.h"
 #include "runtime/exec_env.h"
 #include "runtime/descriptors.h"
 #include "runtime/initial_reservations.h"
@@ -444,7 +445,7 @@ Status ExecNode::create_node(RuntimeState* state, ObjectPool* pool, const TPlanN
         *node = pool->add(new BrokerScanNode(pool, tnode, descs));
         return Status::OK;
 
-    case TPlanNodeType::REPEAT_NODE
+    case TPlanNodeType::REPEAT_NODE:
         *node = pool->add(new RepeatNode(pool, tnode, descs));
         return Status::OK;
 

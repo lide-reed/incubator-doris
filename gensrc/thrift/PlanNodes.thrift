@@ -349,7 +349,7 @@ struct TAggregationNode {
 }
 
 struct TRepeatNode {
-  1: required list<Exprs.TExpr> grouping_exprs
+  1: required list<Exprs.TExpr> input_exprs
   2: required list<i64> repeat_id_list
 }
 

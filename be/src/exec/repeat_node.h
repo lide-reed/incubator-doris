@@ -24,7 +24,22 @@ namespace doris {
 class RepeatNode : public ExecNode {
 public:
     RepeatNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
+    ~RepeatNode();
+
+    virtual Status prepare(RuntimeState* state) override;
+    virtual Status open(RuntimeState* state) override;
     virtual Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
+    virtual Status close(RuntimeState* state) override;
+
+protected:
+    virtual void debug_string(int indentation_level, std::stringstream* out) const;
+
+private:
+    Status init(const TPlanNode& tnode, RuntimeState* state = nullptr);
+
+    std::vector<ExprContext*> _input_expr_ctxs;
+    std::vector<int64_t> _repeat_id_list;
+
 };
 
 }
