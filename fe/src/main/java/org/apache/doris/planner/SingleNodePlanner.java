@@ -672,7 +672,8 @@ public class SingleNodePlanner {
         // add grouping sets process, if required
         AggregateInfo aggInfo = selectStmt.getAggInfo();
         GroupByClause groupByClause = selectStmt.getGroupByClause();
-        if (groupByClause != null) {
+        if (groupByClause != null && groupByClause.isGroupByExtension()) {
+            // introduce repeatNode for group by extension
             root = new RepeatNode(ctx_.getNextNodeId(), root, aggInfo, groupByClause.getGroupingIdList());
         }
 

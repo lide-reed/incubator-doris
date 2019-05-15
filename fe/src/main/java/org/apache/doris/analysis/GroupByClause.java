@@ -163,7 +163,7 @@ public class GroupByClause implements ParseNode {
         analyzed_ = true;
     }
 
-    private boolean isGroupByExtension() {
+    public boolean isGroupByExtension() {
         if (groupingType != GroupingType.GROUPING_SETS
                 && groupingType != GroupingType.CUBE
                 && groupingType != GroupingType.ROLLUP) {
