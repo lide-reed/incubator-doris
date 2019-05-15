@@ -251,13 +251,14 @@ public class GroupByClause implements ParseNode {
     }
 
     private void addGroupingId(Analyzer analyzer) throws  AnalysisException {
-        List<Expr> params = new ArrayList<>();
-        for(Expr expr: groupingExprs) {
-            params.add(expr);
-        }
-        FunctionCallExpr expr = new FunctionCallExpr(GROUPING__ID, params);
-        expr.analyze(analyzer);
-        groupingExprs.add(expr);
+        //TODO complete this function in buildin functionset
+        //List<Expr> params = new ArrayList<>();
+        //for(Expr expr: groupingExprs) {
+        //    params.add(expr);
+        //}
+        //FunctionCallExpr expr = new FunctionCallExpr(GROUPING__ID, params);
+        //expr.analyze(analyzer);
+        //groupingExprs.add(expr);
     }
 
     private void buildGroupingClause(Analyzer analyzer) throws AnalysisException {
