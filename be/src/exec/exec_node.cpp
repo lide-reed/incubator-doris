@@ -444,6 +444,10 @@ Status ExecNode::create_node(RuntimeState* state, ObjectPool* pool, const TPlanN
         *node = pool->add(new BrokerScanNode(pool, tnode, descs));
         return Status::OK;
 
+    case TPlanNodeType::REPEAT_NODE
+        *node = pool->add(new RepeatNode(pool, tnode, descs));
+        return Status::OK;
+
     default:
         map<int, const char*>::const_iterator i =
             _TPlanNodeType_VALUES_TO_NAMES.find(tnode.node_type);
