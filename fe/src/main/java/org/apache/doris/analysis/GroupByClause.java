@@ -19,6 +19,7 @@ package org.apache.doris.analysis;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
+import org.apache.doris.catalog.Type;
 import org.apache.doris.common.AnalysisException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -49,6 +50,8 @@ public class GroupByClause implements ParseNode {
     private GroupingType groupingType;
     private ArrayList<Expr> groupingExprs;
     private List<BitSet> groupingIdList;
+    private TableRef tableRef;
+    private SlotRef groupingIdSlotRef;
 
     // reserve this info for toSQL
     private List<ArrayList<Expr>> groupingSetList;
@@ -66,6 +69,7 @@ public class GroupByClause implements ParseNode {
     }
 
     public ArrayList<Expr> getGroupingExprs() {
+        Preconditions.checkState(analyzed_);
         return groupingExprs;
     }
 
@@ -73,11 +77,21 @@ public class GroupByClause implements ParseNode {
         this.groupingExprs = groupingExprs;
     }
 
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
+    }
+
     protected GroupByClause(GroupByClause other) {
         this.groupingType = other.groupingType;
         this.groupingExprs = Expr.cloneAndResetList(groupingExprs);
         this.groupingIdList = other.groupingIdList;
         this.groupingSetList = other.groupingSetList;
+    }
+
+
+    public SlotRef getGroupingIdSlotRef() {
+        Preconditions.checkState(groupingIdSlotRef != null);
+        return groupingIdSlotRef;
     }
 
     @Override
@@ -251,6 +265,9 @@ public class GroupByClause implements ParseNode {
     }
 
     private void addGroupingId(Analyzer analyzer) throws  AnalysisException {
+        TupleDescriptor tupleDescriptor = tableRef.getDesc();
+        groupingIdSlotRef = new VirtualSlotRef(GROUPING__ID, Type.BIGINT, tupleDescriptor);
+        groupingExprs.add(groupingIdSlotRef);
         //TODO complete this function in buildin functionset
         //List<Expr> params = new ArrayList<>();
         //for(Expr expr: groupingExprs) {
@@ -312,16 +329,5 @@ public class GroupByClause implements ParseNode {
         return groupingIdList;
     }
 
-    public static List<Long> convertGroupingId(List<BitSet> bitSetList) {
-        List<Long> groupingIdList = new ArrayList<>();
-        for(BitSet bitSet: bitSetList) {
-            long l = 0L;
-            for (int i = 0; i < bitSet.length(); ++i) {
-                l += bitSet.get(i) ? (1L << i) : 0L;
-            }
-            groupingIdList.add(l);
-        }
-        return groupingIdList;
-    }
 }
 

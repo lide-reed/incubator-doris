@@ -19,9 +19,6 @@ package org.apache.doris.analysis;
 
 import org.apache.doris.catalog.Type;
 import org.apache.doris.common.AnalysisException;
-import org.apache.doris.thrift.TExprNode;
-import org.apache.doris.thrift.TExprNodeType;
-import org.apache.doris.thrift.TSlotRef;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -32,9 +29,11 @@ public class VirtualSlotRef extends SlotRef {
     private static final Logger LOG = LogManager.getLogger(VirtualSlotRef.class);
     // results of analysis slot
 
-    public VirtualSlotRef(String col, Type type) {
+    private TupleDescriptor tupleDescriptor;
+    public VirtualSlotRef(String col, Type type, TupleDescriptor tupleDescriptor) {
         super(null, col);
         super.type = type;
+        this.tupleDescriptor = tupleDescriptor;
     }
 
     // C'tor for a "pre-analyzed" ref to slot that doesn't correspond to
@@ -58,15 +57,8 @@ public class VirtualSlotRef extends SlotRef {
 
     @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        desc = analyzer.registerVirtualColumnRef(super.getColumnName(), type);
+        desc = analyzer.registerVirtualColumnRef(super.getColumnName(), type, tupleDescriptor);
         numDistinctValues = desc.getStats().getNumDistinctValues();
-    }
-
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.SLOT_REF;
-        msg.slot_ref = new TSlotRef(desc.getId().asInt(), -1);
-        msg.setOutput_column(outputColumn);
     }
 
     public static VirtualSlotRef read(DataInput in) throws IOException {

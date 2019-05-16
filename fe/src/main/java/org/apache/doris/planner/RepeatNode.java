@@ -22,6 +22,7 @@ import com.google.common.base.Preconditions;
 import org.apache.doris.analysis.*;
 import org.apache.doris.thrift.*;
 
+import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
 
@@ -33,12 +34,14 @@ public class RepeatNode extends PlanNode {
 
     private List<Expr> baseExprs;
     private List<BitSet> repeatIdList;
+    private TupleDescriptor tupleDescriptor;
 
-    public RepeatNode(PlanNodeId id, PlanNode input, AggregateInfo aggInfo, List<BitSet> repeatIdList) {
-        super(id, aggInfo.getOutputTupleId().asList(), "REPEATNODE");
+    public RepeatNode(PlanNodeId id, PlanNode input, List<BitSet> repeatIdList, TupleDescriptor tupleDesc) {
+        super(id, input.getTupleIds(), "REPEATNODE");
         this.children.add(input);
-        this.baseExprs = aggInfo.getGroupingExprs();
-        this.repeatIdList = repeatIdList;
+        this.repeatIdList = regenerateRepeatIdList(repeatIdList);
+        this.tupleDescriptor = tupleDesc;
+        tupleIds.add(tupleDescriptor.getId());
     }
 
     @Override
@@ -46,6 +49,21 @@ public class RepeatNode extends PlanNode {
         avgRowSize = 0;
         cardinality = 0;
         numNodes = 1;
+    }
+
+    private static TupleDescriptor createTupleDescriptor(TupleDescriptor inputDesc) {
+        TupleDescriptor tupleDescriptor = null;
+        for(SlotDescriptor slotDescriptor : inputDesc.getSlots()) {
+
+        }
+
+        return tupleDescriptor;
+    }
+
+    //
+    private List<BitSet> regenerateRepeatIdList(List<BitSet> oldRepeatIdList) {
+        List<BitSet> newRepeatIdList = null;
+        return newRepeatIdList;
     }
 
     @Override
@@ -59,7 +77,8 @@ public class RepeatNode extends PlanNode {
     @Override
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.REPEAT_NODE;
-        List<Long> repeatIds = GroupByClause.convertGroupingId(repeatIdList);
+        List<Long> repeatIds = convertToLongList(repeatIdList);
+        //TODO pass tupleid
         List<TExpr> baseExprList = Expr.treesToThrift(baseExprs);
         msg.repeat_node = new TRepeatNode(baseExprList, repeatIds);
     }
@@ -77,5 +96,22 @@ public class RepeatNode extends PlanNode {
         output.append(repeatIdList.size());
         output.append(" lines and 1 column\n");
         return output.toString();
+    }
+
+    @Override
+    public int getNumInstances() {
+        return children.get(0).getNumInstances();
+    }
+
+    public static List<Long> convertToLongList(List<BitSet> bitSetList) {
+        List<Long> groupingIdList = new ArrayList<>();
+        for(BitSet bitSet: bitSetList) {
+            long l = 0L;
+            for (int i = 0; i < bitSet.length(); ++i) {
+                l += bitSet.get(i) ? (1L << i) : 0L;
+            }
+            groupingIdList.add(l);
+        }
+        return groupingIdList;
     }
 }

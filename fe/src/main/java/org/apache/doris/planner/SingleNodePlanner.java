@@ -27,11 +27,15 @@ import org.apache.doris.catalog.AggregateType;
 import org.apache.doris.catalog.Column;
 import org.apache.doris.catalog.MysqlTable;
 import org.apache.doris.catalog.Table;
-import org.apache.doris.common.*;
+import org.apache.doris.common.AnalysisException;
+import org.apache.doris.common.Pair;
+import org.apache.doris.common.Reference;
+import org.apache.doris.common.UserException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.List;
 import java.util.Map;
 
@@ -654,7 +658,49 @@ public class SingleNodePlanner {
         }
 
         // add aggregation, if required
-        if (aggInfo != null) root = createAggregationPlan(selectStmt, analyzer, root);
+        if (aggInfo != null) {
+            root = createAggregationPlan(selectStmt, analyzer, root);
+
+            // introduce repeatNode for group by extension
+            GroupByClause groupByClause = selectStmt.getGroupByClause();
+            if (groupByClause != null && groupByClause.isGroupByExtension()) {
+                root = createRepeatNodePlan(selectStmt, analyzer, root);
+            }
+        }
+
+        return root;
+    }
+
+    private PlanNode createRepeatNodePlan(SelectStmt selectStmt, Analyzer analyzer,
+                                           PlanNode root) throws UserException {
+        GroupByClause groupByClause = selectStmt.getGroupByClause();
+        Preconditions.checkState(groupByClause != null && groupByClause.isGroupByExtension());
+
+        TupleDescriptor newTupleDesc
+                = analyzer.getDescTbl().copyTupleDescriptor(root.getTupleIds().get(0), "repeat");
+        SlotRef slotRef = groupByClause.getGroupingIdSlotRef();
+        SlotDescriptor slotDesc = new SlotDescriptor(slotRef.getDesc().getId(), newTupleDesc);
+        newTupleDesc.addSlot(slotDesc);
+
+        List<BitSet> bitSetList = new ArrayList<BitSet>();
+        List<Expr> exprList = groupByClause.getGroupingExprs();
+        List<SlotDescriptor> slotList = newTupleDesc.getSlots();
+        for(BitSet bitSet : groupByClause.getGroupingIdList()) {
+            BitSet newBitSet = new BitSet();
+            for(int i = 0; i < slotList.size(); i++) {
+                SlotId slotId = slotList.get(i).getId();
+                for(int j = 0; j < exprList.size(); j++) {
+                    if (bitSet.get(j) && exprList.get(j).isBound(slotId)) {
+                        newBitSet.set(i);
+                    } else {
+                        newBitSet.clear(i);
+                    }
+                }
+            }
+            bitSetList.add(newBitSet);
+        }
+
+        root = new RepeatNode(ctx_.getNextNodeId(), root, bitSetList, newTupleDesc);
 
         return root;
     }
@@ -669,15 +715,8 @@ public class SingleNodePlanner {
         root.assignConjuncts(analyzer);
         Preconditions.checkState(selectStmt.getAggInfo() != null);
 
-        // add grouping sets process, if required
-        AggregateInfo aggInfo = selectStmt.getAggInfo();
-        GroupByClause groupByClause = selectStmt.getGroupByClause();
-        if (groupByClause != null && groupByClause.isGroupByExtension()) {
-            // introduce repeatNode for group by extension
-            root = new RepeatNode(ctx_.getNextNodeId(), root, aggInfo, groupByClause.getGroupingIdList());
-        }
-
         // add aggregation, if required
+        AggregateInfo aggInfo = selectStmt.getAggInfo();
         PlanNode newRoot = new AggregationNode(ctx_.getNextNodeId(), root, aggInfo);
         newRoot.init(analyzer);
         Preconditions.checkState(newRoot.hasValidStats());

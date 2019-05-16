@@ -18,6 +18,7 @@
 package org.apache.doris.analysis;
 
 import org.apache.doris.common.AnalysisException;
+import org.apache.doris.planner.RepeatNode;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -65,7 +66,7 @@ public class SelectStmtTest {
         {
             Long[] answer = {4L, 9L ,10L};
             Set<Long> answerSet = new HashSet<Long>(Arrays.asList(answer));
-            List<Long> groupingIds = GroupByClause.convertGroupingId(bitSetList);
+            List<Long> groupingIds = RepeatNode.convertToLongList(bitSetList);
             Set<Long> resultSet = new HashSet<>();
             resultSet.addAll(groupingIds);
             Assert.assertEquals(answerSet, resultSet);
@@ -103,7 +104,7 @@ public class SelectStmtTest {
         {
             Long[] answer = {0L, 1L ,3L};
             Set<Long> answerSet = new HashSet<Long>(Arrays.asList(answer));
-            List<Long> groupingIds = GroupByClause.convertGroupingId(bitSetList);
+            List<Long> groupingIds = RepeatNode.convertToLongList(bitSetList);
             Set<Long> resultSet = new HashSet<>();
             resultSet.addAll(groupingIds);
             Assert.assertEquals(answerSet, resultSet);
@@ -142,7 +143,7 @@ public class SelectStmtTest {
         {
             Long[] answer = {0L, 1L ,2L, 3L, 4L, 5L, 6L};
             Set<Long> answerSet = new HashSet<Long>(Arrays.asList(answer));
-            List<Long> groupingIds = GroupByClause.convertGroupingId(bitSetList);
+            List<Long> groupingIds = RepeatNode.convertToLongList(bitSetList);
             Set<Long> resultSet = new HashSet<>();
             resultSet.addAll(groupingIds);
             Assert.assertEquals(answerSet, resultSet);

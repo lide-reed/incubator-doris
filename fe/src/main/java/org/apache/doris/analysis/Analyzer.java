@@ -584,7 +584,8 @@ public class Analyzer {
         return result;
     }
 
-    public SlotDescriptor registerVirtualColumnRef(String colName, Type type) throws AnalysisException {
+    public SlotDescriptor registerVirtualColumnRef(String colName, Type type, TupleDescriptor tupleDescriptor)
+            throws AnalysisException {
         // Make column name case insensitive
         String key = colName;
         SlotDescriptor result = slotRefMap.get(key);
@@ -593,11 +594,11 @@ public class Analyzer {
             return result;
         }
 
-        Preconditions.checkState(getDescTbl().getTupleDescs().iterator().hasNext());
-        result = new SlotDescriptor(SlotId.createGenerator().getNextId(), getDescTbl().getTupleDescs().iterator().next());
+        result = new SlotDescriptor(SlotId.createGenerator().getNextId(), tupleDescriptor);
         Column col = new Column(colName, type);
         result.setColumn(col);
         result.setIsNullable(true);
+        tupleDescriptor.addSlot(result);
         slotRefMap.put(key, result);
         return result;
     }

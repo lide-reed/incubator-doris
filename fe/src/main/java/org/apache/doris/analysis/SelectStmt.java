@@ -375,10 +375,6 @@ public class SelectStmt extends QueryStmt {
 
         createSortInfo(analyzer);
 
-        if (groupByClause != null) {
-            groupByClause.analyze(analyzer);
-        }
-
         analyzeAggregation(analyzer);
         createAnalyticInfo(analyzer);
         if (evaluateOrderBy) {
@@ -844,6 +840,11 @@ public class SelectStmt extends QueryStmt {
 
         ArrayList<Expr> groupingExprsCopy = Lists.newArrayList();
         if (groupByClause != null) {
+            groupByClause.setTableRef(getTableRefs().get(0));
+
+            // must do it before copying for createAggInfo()
+            groupByClause.analyze(analyzer);
+
             // make a deep copy here, we don't want to modify the original
             // exprs during analysis (in case we need to print them later)
             groupingExprsCopy = Expr.cloneList(groupByClause.getGroupingExprs());
