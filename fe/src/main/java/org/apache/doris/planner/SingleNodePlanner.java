@@ -676,12 +676,14 @@ public class SingleNodePlanner {
         GroupByClause groupByClause = selectStmt.getGroupByClause();
         Preconditions.checkState(groupByClause != null && groupByClause.isGroupByExtension());
 
+        //TODO join and subsquery
         TupleDescriptor newTupleDesc
                 = analyzer.getDescTbl().copyTupleDescriptor(root.getTupleIds().get(0), "repeat");
         SlotRef slotRef = groupByClause.getGroupingIdSlotRef();
         SlotDescriptor slotDesc = new SlotDescriptor(slotRef.getDesc().getId(), newTupleDesc);
         newTupleDesc.addSlot(slotDesc);
 
+        // build new BitSet List for tupleDesc
         List<BitSet> bitSetList = new ArrayList<BitSet>();
         List<Expr> exprList = groupByClause.getGroupingExprs();
         List<SlotDescriptor> slotList = newTupleDesc.getSlots();
