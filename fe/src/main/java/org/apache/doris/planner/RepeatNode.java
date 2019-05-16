@@ -34,14 +34,14 @@ public class RepeatNode extends PlanNode {
 
     private List<Expr> baseExprs;
     private List<BitSet> repeatIdList;
-    private TupleDescriptor tupleDescriptor;
+    private TupleDescriptor outputTupleDesc;
 
     public RepeatNode(PlanNodeId id, PlanNode input, List<BitSet> repeatIdList, TupleDescriptor tupleDesc) {
         super(id, input.getTupleIds(), "REPEATNODE");
         this.children.add(input);
         this.repeatIdList = regenerateRepeatIdList(repeatIdList);
-        this.tupleDescriptor = tupleDesc;
-        tupleIds.add(tupleDescriptor.getId());
+        this.outputTupleDesc = tupleDesc;
+        tupleIds.add(outputTupleDesc.getId());
     }
 
     @Override
@@ -78,9 +78,7 @@ public class RepeatNode extends PlanNode {
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.REPEAT_NODE;
         List<Long> repeatIds = convertToLongList(repeatIdList);
-        //TODO pass tupleid
-        List<TExpr> baseExprList = Expr.treesToThrift(baseExprs);
-        msg.repeat_node = new TRepeatNode(baseExprList, repeatIds);
+        msg.repeat_node = new TRepeatNode(outputTupleDesc.getId().asInt(), repeatIds);
     }
 
     @Override
