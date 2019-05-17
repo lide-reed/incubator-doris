@@ -50,7 +50,6 @@ public class GroupByClause implements ParseNode {
     private GroupingType groupingType;
     private ArrayList<Expr> groupingExprs;
     private List<BitSet> groupingIdList;
-    private TableRef tableRef;
     private SlotRef groupingIdSlotRef;
 
     // reserve this info for toSQL
@@ -75,10 +74,6 @@ public class GroupByClause implements ParseNode {
 
     public void setGroupingExprs(ArrayList<Expr> groupingExprs) {
         this.groupingExprs = groupingExprs;
-    }
-
-    public void setTableRef(TableRef tableRef) {
-        this.tableRef = tableRef;
     }
 
     protected GroupByClause(GroupByClause other) {
@@ -265,17 +260,10 @@ public class GroupByClause implements ParseNode {
     }
 
     private void addGroupingId(Analyzer analyzer) throws  AnalysisException {
-        TupleDescriptor tupleDescriptor = tableRef.getDesc();
-        groupingIdSlotRef = new VirtualSlotRef(GROUPING__ID, Type.BIGINT, tupleDescriptor);
+        TupleDescriptor tupleDesc = analyzer.getDescTbl().createTupleDescriptor(GROUPING__ID);
+        groupingIdSlotRef = new VirtualSlotRef(GROUPING__ID, Type.BIGINT, tupleDesc);
         groupingExprs.add(groupingIdSlotRef);
-        //TODO complete this function in buildin functionset
-        //List<Expr> params = new ArrayList<>();
-        //for(Expr expr: groupingExprs) {
-        //    params.add(expr);
-        //}
-        //FunctionCallExpr expr = new FunctionCallExpr(GROUPING__ID, params);
-        //expr.analyze(analyzer);
-        //groupingExprs.add(expr);
+
     }
 
     private void buildGroupingClause(Analyzer analyzer) throws AnalysisException {

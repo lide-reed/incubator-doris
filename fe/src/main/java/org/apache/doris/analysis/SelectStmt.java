@@ -840,8 +840,6 @@ public class SelectStmt extends QueryStmt {
 
         ArrayList<Expr> groupingExprsCopy = Lists.newArrayList();
         if (groupByClause != null) {
-            groupByClause.setTableRef(getTableRefs().get(0));
-
             // must do it before copying for createAggInfo()
             groupByClause.analyze(analyzer);
 

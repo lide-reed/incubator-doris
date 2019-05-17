@@ -676,14 +676,20 @@ public class SingleNodePlanner {
         GroupByClause groupByClause = selectStmt.getGroupByClause();
         Preconditions.checkState(groupByClause != null && groupByClause.isGroupByExtension());
 
-        //TODO join and subsquery is right?
-        TupleDescriptor newTupleDesc
-                = analyzer.getDescTbl().copyTupleDescriptor(root.getTupleIds().get(0), "repeat");
+        // build tupleDesc according to child's tupleDesc info
+        SlotRef slotRef = groupByClause.getGroupingIdSlotRef();
+        Preconditions.checkState(slotRef.getDesc() != null);
+        TupleDescriptor repeatNodeTupleDesc = slotRef.getDesc().getParent();
+        DescriptorTable descTable = analyzer.getDescTbl();
+        for (SlotDescriptor slot: descTable.getTupleDesc(root.getTupleIds().get(0)).getSlots()) {
+            descTable.copySlotDescriptor(repeatNodeTupleDesc, slot);
+        }
+        repeatNodeTupleDesc.computeMemLayout();
 
         // build new BitSet List for tupleDesc
         List<BitSet> bitSetList = new ArrayList<BitSet>();
         List<Expr> exprList = groupByClause.getGroupingExprs();
-        List<SlotDescriptor> slotList = newTupleDesc.getSlots();
+        List<SlotDescriptor> slotList = repeatNodeTupleDesc.getSlots();
         for(BitSet bitSet : groupByClause.getGroupingIdList()) {
             BitSet newBitSet = new BitSet();
             for(int i = 0; i < slotList.size(); i++) {
@@ -699,7 +705,7 @@ public class SingleNodePlanner {
             bitSetList.add(newBitSet);
         }
 
-        root = new RepeatNode(ctx_.getNextNodeId(), root, bitSetList, newTupleDesc);
+        root = new RepeatNode(ctx_.getNextNodeId(), root, bitSetList, repeatNodeTupleDesc);
 
         return root;
     }
