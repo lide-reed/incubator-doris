@@ -659,13 +659,13 @@ public class SingleNodePlanner {
 
         // add aggregation, if required
         if (aggInfo != null) {
-            root = createAggregationPlan(selectStmt, analyzer, root);
-
             // introduce repeatNode for group by extension
             GroupByClause groupByClause = selectStmt.getGroupByClause();
             if (groupByClause != null && groupByClause.isGroupByExtension()) {
                 root = createRepeatNodePlan(selectStmt, analyzer, root);
             }
+
+            root = createAggregationPlan(selectStmt, analyzer, root);
         }
 
         return root;
