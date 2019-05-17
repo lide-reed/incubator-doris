@@ -39,7 +39,7 @@ public class RepeatNode extends PlanNode {
     public RepeatNode(PlanNodeId id, PlanNode input, List<BitSet> repeatIdList, TupleDescriptor tupleDesc) {
         super(id, input.getTupleIds(), "REPEATNODE");
         this.children.add(input);
-        this.repeatIdList = regenerateRepeatIdList(repeatIdList);
+        this.repeatIdList = repeatIdList;
         this.outputTupleDesc = tupleDesc;
         tupleIds.add(outputTupleDesc.getId());
     }
@@ -49,21 +49,6 @@ public class RepeatNode extends PlanNode {
         avgRowSize = 0;
         cardinality = 0;
         numNodes = 1;
-    }
-
-    private static TupleDescriptor createTupleDescriptor(TupleDescriptor inputDesc) {
-        TupleDescriptor tupleDescriptor = null;
-        for(SlotDescriptor slotDescriptor : inputDesc.getSlots()) {
-
-        }
-
-        return tupleDescriptor;
-    }
-
-    //
-    private List<BitSet> regenerateRepeatIdList(List<BitSet> oldRepeatIdList) {
-        List<BitSet> newRepeatIdList = null;
-        return newRepeatIdList;
     }
 
     @Override
