@@ -677,9 +677,9 @@ public class SingleNodePlanner {
         Preconditions.checkState(groupByClause != null && groupByClause.isGroupByExtension());
 
         // build tupleDesc according to child's tupleDesc info
-        SlotRef slotRef = groupByClause.getGroupingIdSlotRef();
-        Preconditions.checkState(slotRef.getDesc() != null);
-        TupleDescriptor repeatNodeTupleDesc = slotRef.getDesc().getParent();
+        SlotRef groupingIdSlotRef = groupByClause.getGroupingIdSlotRef();
+        Preconditions.checkState(groupingIdSlotRef.getDesc() != null);
+        TupleDescriptor repeatNodeTupleDesc = groupingIdSlotRef.getDesc().getParent();
         DescriptorTable descTable = analyzer.getDescTbl();
         for (SlotDescriptor slot: descTable.getTupleDesc(root.getTupleIds().get(0)).getSlots()) {
             descTable.copySlotDescriptor(repeatNodeTupleDesc, slot);
@@ -705,7 +705,8 @@ public class SingleNodePlanner {
             bitSetList.add(newBitSet);
         }
 
-        root = new RepeatNode(ctx_.getNextNodeId(), root, bitSetList, repeatNodeTupleDesc);
+        root = new RepeatNode(ctx_.getNextNodeId(), root, bitSetList, repeatNodeTupleDesc,
+                groupingIdSlotRef.getSlotId().asInt());
 
         return root;
     }

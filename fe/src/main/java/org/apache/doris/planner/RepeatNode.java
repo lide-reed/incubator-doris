@@ -32,15 +32,16 @@ import java.util.List;
  */
 public class RepeatNode extends PlanNode {
 
-    private List<Expr> baseExprs;
     private List<BitSet> repeatIdList;
     private TupleDescriptor outputTupleDesc;
+    private int slotId;
 
-    public RepeatNode(PlanNodeId id, PlanNode input, List<BitSet> repeatIdList, TupleDescriptor tupleDesc) {
+    public RepeatNode(PlanNodeId id, PlanNode input, List<BitSet> repeatIdList, TupleDescriptor tupleDesc, int slotId) {
         super(id, input.getTupleIds(), "REPEATNODE");
         this.children.add(input);
         this.repeatIdList = repeatIdList;
         this.outputTupleDesc = tupleDesc;
+        this.slotId = slotId;
         tupleIds.add(outputTupleDesc.getId());
     }
 
@@ -63,12 +64,12 @@ public class RepeatNode extends PlanNode {
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.REPEAT_NODE;
         List<Long> repeatIds = convertToLongList(repeatIdList);
-        msg.repeat_node = new TRepeatNode(outputTupleDesc.getId().asInt(), repeatIds);
+        msg.repeat_node = new TRepeatNode(outputTupleDesc.getId().asInt(), repeatIds, slotId);
     }
 
     @Override
     protected String debugString() {
-        return Objects.toStringHelper(this).add("Repeat", baseExprs).addValue(
+        return Objects.toStringHelper(this).add("Repeat", repeatIdList.size()).addValue(
                 super.debugString()).toString();
     }
 
