@@ -21,6 +21,10 @@
 
 namespace doris {
 
+class Tuple;
+class RuntimeState;
+class RowBatch;
+
 class RepeatNode : public ExecNode {
 public:
     RepeatNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
@@ -35,11 +39,19 @@ protected:
     virtual void debug_string(int indentation_level, std::stringstream* out) const;
 
 private:
-    Status init(const TPlanNode& tnode, RuntimeState* state = nullptr);
+    int conver_to_int(int repeat_id_idx);
+    Status get_repeated_batch(RowBatch* child_row_batch, int repeat_id_idx, RowBatch* row_batch);
 
-    std::vector<ExprContext*> _input_expr_ctxs;
-    std::vector<int64_t> _repeat_id_list;
+    std::vector<std::vector<bool>> _repeat_id_list;
+    TupleId _tuple_id;
+    SlotId _new_slot_id;
+    const TupleDescriptor* _tuple_desc;
+    const SlotDescriptor* _new_slot_desc;
 
+    std::unique_ptr<RowBatch> _child_row_batch;
+    bool _child_eos;
+    int _repeat_id_idx;
+    RuntimeState* _runtime_state;
 };
 
 }
