@@ -63,7 +63,7 @@ public class RepeatNode extends PlanNode {
     @Override
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.REPEAT_NODE;
-        List<Long> repeatIds = convertToLongList(repeatIdList);
+        List<List<Boolean>> repeatIds = convertToBooleanList(repeatIdList);
         msg.repeat_node = new TRepeatNode(outputTupleDesc.getId().asInt(), repeatIds, slotId);
     }
 
@@ -93,6 +93,18 @@ public class RepeatNode extends PlanNode {
             long l = 0L;
             for (int i = 0; i < bitSet.length(); ++i) {
                 l += bitSet.get(i) ? (1L << i) : 0L;
+            }
+            groupingIdList.add(l);
+        }
+        return groupingIdList;
+    }
+
+    public static List<List<Boolean>> convertToBooleanList(List<BitSet> bitSetList) {
+        List<List<Boolean>> groupingIdList = new ArrayList<>();
+        for(BitSet bitSet: bitSetList) {
+            List<Boolean> l = new ArrayList<>();
+            for (int i = 0; i < bitSet.length(); ++i) {
+                l.add(bitSet.get(i));
             }
             groupingIdList.add(l);
         }
