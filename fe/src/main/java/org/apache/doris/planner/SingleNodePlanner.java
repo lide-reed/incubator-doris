@@ -34,10 +34,7 @@ import org.apache.doris.common.UserException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
-import java.util.BitSet;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Constructs a non-executable single-node plan from an analyzed parse tree.
@@ -680,9 +677,11 @@ public class SingleNodePlanner {
         SlotRef groupingIdSlotRef = groupByClause.getGroupingIdSlotRef();
         Preconditions.checkState(groupingIdSlotRef.getDesc() != null);
         TupleDescriptor repeatNodeTupleDesc = groupingIdSlotRef.getDesc().getParent();
+        Map<SlotDescriptor, SlotId> slotIdMap = new HashMap<>();
         DescriptorTable descTable = analyzer.getDescTbl();
         for (SlotDescriptor slot: descTable.getTupleDesc(root.getTupleIds().get(0)).getSlots()) {
-            descTable.copySlotDescriptor(repeatNodeTupleDesc, slot);
+            SlotDescriptor newSlotDesc = descTable.copySlotDescriptor(repeatNodeTupleDesc, slot);
+            slotIdMap.put(newSlotDesc, slot.getId());
         }
         repeatNodeTupleDesc.computeMemLayout();
 
@@ -693,7 +692,8 @@ public class SingleNodePlanner {
         for(BitSet bitSet : groupByClause.getGroupingIdList()) {
             BitSet newBitSet = new BitSet();
             for(int i = 0; i < slotList.size(); i++) {
-                SlotId slotId = slotList.get(i).getId();
+                SlotId slotId = slotIdMap.get(slotList.get(i));
+                Preconditions.checkState(slotId != null);
                 newBitSet.clear(i);
                 for(int j = 0; j < exprList.size(); j++) {
                     if (bitSet.get(j) && exprList.get(j).isBound(slotId)) {
