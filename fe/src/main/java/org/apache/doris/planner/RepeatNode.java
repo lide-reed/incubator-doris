@@ -37,7 +37,7 @@ public class RepeatNode extends PlanNode {
     private int slotId;
 
     public RepeatNode(PlanNodeId id, PlanNode input, List<BitSet> repeatIdList, TupleDescriptor tupleDesc, int slotId) {
-        super(id, input.getTupleIds(), "REPEATNODE");
+        super(id, tupleDesc.getId().asList(), "REPEATNODE");
         this.children.add(input);
         this.repeatIdList = repeatIdList;
         this.outputTupleDesc = tupleDesc;
