@@ -18,6 +18,7 @@
 #include "exec/repeat_node.h"
 
 #include "exprs/expr.h"
+#include "runtime/raw_value.h"
 #include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
@@ -72,7 +73,7 @@ int RepeatNode::conver_to_int(int repeat_id_idx) {
     int size = _tuple_desc->slots().size();
     if (repeat_id_idx < 0) {
         for(int i = 0; i < size; i++) {
-            result = result * 10 + 1;
+            result += (1 << i);
         }
         return result;
     }
@@ -80,10 +81,7 @@ int RepeatNode::conver_to_int(int repeat_id_idx) {
     std::vector<bool> repeat_ids = _repeat_id_list[repeat_id_idx];
     DCHECK_EQ(size, repeat_ids.size());
     for(int i = 0; i < repeat_ids.size(); i++) {
-        result = result * 10;
-        if (repeat_ids[i]) {
-            result += 1;
-        }
+        result += repeat_ids[i] ? (1 << i) : 0;
     }
     return result;
 }
@@ -92,40 +90,70 @@ Status RepeatNode::get_repeated_batch(
             RowBatch* child_row_batch, int repeat_id_idx, RowBatch* row_batch) {
 
     DCHECK(repeat_id_idx >= -1);
-    DCHECK(repeat_id_idx < _repeat_id_list.size());
+    DCHECK(repeat_id_idx < (int)_repeat_id_list.size());
     DCHECK(child_row_batch != nullptr);
     DCHECK_EQ(row_batch->num_rows(), 0);
 
-    child_row_batch->deep_copy_to(row_batch);
-    //++_num_rows_returned;
-    //COUNTER_SET(_rows_returned_counter, _num_rows_returned);
+    LOG(INFO) << "###################\n";
+    LOG(INFO) << child_row_batch->to_string();
+    LOG(INFO) << "-------------------\n";
 
-    for (int i = 0; i < row_batch->num_rows(); i++) {
-        TupleRow* row = row_batch->get_row(i);
-        Tuple* tuple = row->get_tuple(0);
-        if (tuple == NULL) {
-            //TODO process
-            continue;
+    MemPool* tuple_pool = row_batch->tuple_data_pool();
+    int tuple_buffer_size = row_batch->capacity() * _tuple_desc->byte_size();
+    void* tuple_buffer = tuple_pool->allocate(tuple_buffer_size);
+    if (tuple_buffer == nullptr) {
+        return Status("Allocate memory for row batch failed.");
+    }
+    Tuple* tuple = reinterpret_cast<Tuple*>(tuple_buffer);
+    for (int i = 0; i < child_row_batch->num_rows(); ++i) {
+        int row_idx = row_batch->add_row();
+        TupleRow* row = row_batch->get_row(row_idx);
+        row->set_tuple(0, tuple);
+        memset(tuple, 0, _tuple_desc->num_null_bytes());
+
+        // GROUPING__ID located in index 0
+        const SlotDescriptor* slot_desc = _tuple_desc->slots()[0];
+        if (slot_desc->id() == _new_slot_id) {
+            DCHECK(slot_desc->col_name() == "GROUPING__ID");
+            int* groupingId = reinterpret_cast<int*>(tuple->get_slot(slot_desc->tuple_offset()));
+            if (groupingId != NULL) {
+                *groupingId = conver_to_int(repeat_id_idx);
+            }
         }
-        for (int j = 0; j < _tuple_desc->slots().size(); j++) {
-            const SlotDescriptor* slot_desc = _tuple_desc->slots()[i];
-            if (slot_desc->id() == _new_slot_id) {
-                DCHECK(slot_desc->col_name() == "GROUPING__ID");
-                int* groupingId = reinterpret_cast<int*>(tuple->get_slot(slot_desc->tuple_offset()));
-                if (groupingId != NULL) {
-                    *groupingId = conver_to_int(repeat_id_idx);
+
+        const vector<TupleDescriptor*>& tuple_descs = child_row_batch->row_desc().tuple_descriptors();
+        DCHECK(tuple_descs.size() > 0);
+        TupleDescriptor *child_desc = tuple_descs[0];
+        TupleRow* child_row = child_row_batch->get_row(i);
+        Tuple* src_tuple = child_row->get_tuple(0);
+        DCHECK_EQ(child_desc->slots().size(), _tuple_desc->slots().size() - 1);
+        for (int j = 1; j < _tuple_desc->slots().size(); j++) {
+            SlotDescriptor* src_slot_desc = child_desc->slots()[j - 1];
+            SlotDescriptor* dst_slot_desc = _tuple_desc->slots()[j];
+            bool src_slot_null = src_tuple->is_null(src_slot_desc->null_indicator_offset());
+            void* src_slot = NULL;
+            if (!src_slot_null) src_slot = src_tuple->get_slot(src_slot_desc->tuple_offset());
+            RawValue::write(src_slot, tuple, dst_slot_desc, tuple_pool);
+            if (repeat_id_idx >= 0) {
+                std::vector<bool> repeat_ids = _repeat_id_list[repeat_id_idx];
+                DCHECK(repeat_ids.size() == _tuple_desc->slots().size());
+                if (!repeat_ids[j]) {
+                    tuple->set_null(slot_desc->null_indicator_offset());
                 }
             }
-
-            if (repeat_id_idx < 0) continue;
-
-            std::vector<bool> repeat_ids = _repeat_id_list[repeat_id_idx];
-            DCHECK(repeat_ids.size() == _tuple_desc->slots().size());
-            if (!repeat_ids[j]) {
-                tuple->set_null(slot_desc->null_indicator_offset());
-            }
         }
+
+        row_batch->commit_last_row();
+        char* new_tuple = reinterpret_cast<char*>(tuple);
+        new_tuple += _tuple_desc->byte_size();
+        tuple = reinterpret_cast<Tuple*>(new_tuple);
     }
+
+    LOG(INFO) << "################### row_batch\n";
+    LOG(INFO) << row_batch->to_string();
+    LOG(INFO) << "-------------------\n";
+    //++_num_rows_returned;
+    //COUNTER_SET(_rows_returned_counter, _num_rows_returned);
 
     return Status::OK;
 }
@@ -141,7 +169,7 @@ Status RepeatNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos)
         _child_row_batch.reset(
                     new RowBatch(child(0)->row_desc(), state->batch_size(), mem_tracker()));
         RETURN_IF_ERROR(child(0)->get_next(state, _child_row_batch.get(), &_child_eos));
-        if (_child_eos || _child_row_batch == nullptr) {
+        if (_child_eos || _child_row_batch.get() == nullptr) {
             *eos = true;
             return Status::OK;
         }
@@ -151,7 +179,8 @@ Status RepeatNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos)
     RETURN_IF_ERROR(get_repeated_batch(_child_row_batch.get(), _repeat_id_idx, row_batch));
     _repeat_id_idx++;
 
-    if (_repeat_id_idx >= _repeat_id_list.size()) {
+    int size = _repeat_id_list.size();
+    if (_repeat_id_idx >= size) {
         _child_row_batch.reset(nullptr);
         _repeat_id_idx = -1;
     }
