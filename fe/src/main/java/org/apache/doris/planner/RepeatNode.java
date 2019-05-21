@@ -99,11 +99,11 @@ public class RepeatNode extends PlanNode {
         return groupingIdList;
     }
 
-    public static List<List<Boolean>> convertToBooleanList(List<BitSet> bitSetList) {
+    private List<List<Boolean>> convertToBooleanList(List<BitSet> bitSetList) {
         List<List<Boolean>> groupingIdList = new ArrayList<>();
         for(BitSet bitSet: bitSetList) {
             List<Boolean> l = new ArrayList<>();
-            for (int i = 0; i < bitSet.length(); ++i) {
+            for (int i = 0; i < outputTupleDesc.getSlots().size(); ++i) {
                 l.add(bitSet.get(i));
             }
             groupingIdList.add(l);
