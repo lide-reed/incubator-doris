@@ -692,13 +692,14 @@ public class SingleNodePlanner {
         List<SlotDescriptor> slotList = repeatNodeTupleDesc.getSlots();
         for(BitSet bitSet : groupByClause.getGroupingIdList()) {
             BitSet newBitSet = new BitSet();
-            for(int i = 0; i < slotList.size(); i++) {
-                SlotId slotId = slotList.get(i).getId();
-                for(int j = 0; j < exprList.size(); j++) {
-                    if (bitSet.get(j) && exprList.get(j).isBound(slotId)) {
+            for(int i = 0; i < exprList.size(); i++) {
+                Expr expr = exprList.get(i);
+                newBitSet.clear(i);
+                for(int j = 0; j < slotList.size(); j++) {
+                    SlotId slotId = slotList.get(j).getId();
+                    if (bitSet.get(j) && expr.isBound(slotId)) {
                         newBitSet.set(i);
-                    } else {
-                        newBitSet.clear(i);
+                        break;
                     }
                 }
             }
