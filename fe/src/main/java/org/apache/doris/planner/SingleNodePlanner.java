@@ -692,9 +692,9 @@ public class SingleNodePlanner {
         for(BitSet bitSet : groupByClause.getGroupingIdList()) {
             BitSet newBitSet = new BitSet();
             for(int i = 0; i < slotList.size(); i++) {
-                SlotId slotId = slotIdMap.get(slotList.get(i));
-                Preconditions.checkState(slotId != null);
                 newBitSet.clear(i);
+                SlotId slotId = slotIdMap.get(slotList.get(i));
+                if (slotId == null) continue;
                 for(int j = 0; j < exprList.size(); j++) {
                     if (bitSet.get(j) && exprList.get(j).isBound(slotId)) {
                         newBitSet.set(i);
