@@ -677,36 +677,37 @@ public class SingleNodePlanner {
         SlotRef groupingIdSlotRef = groupByClause.getGroupingIdSlotRef();
         Preconditions.checkState(groupingIdSlotRef.getDesc() != null);
         TupleDescriptor repeatNodeTupleDesc = groupingIdSlotRef.getDesc().getParent();
-        Map<SlotDescriptor, SlotId> slotIdMap = new HashMap<>();
-        DescriptorTable descTable = analyzer.getDescTbl();
-        for (SlotDescriptor slot: descTable.getTupleDesc(root.getTupleIds().get(0)).getSlots()) {
-            SlotDescriptor newSlotDesc = descTable.copySlotDescriptor(repeatNodeTupleDesc, slot);
-            slotIdMap.put(newSlotDesc, slot.getId());
-        }
         repeatNodeTupleDesc.computeMemLayout();
 
         // build new BitSet List for tupleDesc
-        List<BitSet> bitSetList = new ArrayList<BitSet>();
+        Set<SlotDescriptor> slotDescSet = new HashSet<>();
+        for(TupleId tupleId : root.getTupleIds()) {
+            TupleDescriptor tupleDescriptor = analyzer.getDescTbl().getTupleDesc(tupleId);
+            slotDescSet.addAll(tupleDescriptor.getSlots());
+        }
+
+        List<Set<SlotId>> groupingIdList = new ArrayList<>();
+        List<Long> groupingIdValueList = new ArrayList<>();
         List<Expr> exprList = groupByClause.getGroupingExprs();
-        List<SlotDescriptor> slotList = repeatNodeTupleDesc.getSlots();
+        groupingIdValueList.add(1L << exprList.size() - 1);
         for(BitSet bitSet : groupByClause.getGroupingIdList()) {
-            BitSet newBitSet = new BitSet();
-            for(int i = 0; i < slotList.size(); i++) {
-                newBitSet.clear(i);
-                SlotId slotId = slotIdMap.get(slotList.get(i));
+            Set<SlotId> slotIdSet = new HashSet<>();
+            for(SlotDescriptor slotDesc : slotDescSet) {
+                SlotId slotId = slotDesc.getId();
                 if (slotId == null) continue;
-                for(int j = 0; j < exprList.size(); j++) {
-                    if (bitSet.get(j) && exprList.get(j).isBound(slotId)) {
-                        newBitSet.set(i);
+                for(int i = 0; i < exprList.size(); i++) {
+                    if (bitSet.get(i) && exprList.get(i).isBound(slotId)) {
+                        slotIdSet.add(slotId);
                         break;
                     }
                 }
             }
-            bitSetList.add(newBitSet);
+            groupingIdList.add(slotIdSet);
+            groupingIdValueList.add(RepeatNode.convert(bitSet));
         }
 
-        root = new RepeatNode(ctx_.getNextNodeId(), root, bitSetList, repeatNodeTupleDesc,
-                groupingIdSlotRef.getSlotId().asInt());
+        root = new RepeatNode(ctx_.getNextNodeId(), root, groupingIdList, repeatNodeTupleDesc,
+                groupingIdValueList);
 
         return root;
     }

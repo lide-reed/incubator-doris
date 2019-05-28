@@ -19,12 +19,16 @@ package org.apache.doris.planner;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
-import org.apache.doris.analysis.*;
-import org.apache.doris.thrift.*;
+import org.apache.doris.analysis.Analyzer;
+import org.apache.doris.analysis.SlotId;
+import org.apache.doris.analysis.TupleDescriptor;
+import org.apache.doris.analysis.TupleId;
+import org.apache.doris.thrift.TExplainLevel;
+import org.apache.doris.thrift.TPlanNode;
+import org.apache.doris.thrift.TPlanNodeType;
+import org.apache.doris.thrift.TRepeatNode;
 
-import java.util.ArrayList;
-import java.util.BitSet;
-import java.util.List;
+import java.util.*;
 
 /**
  * Used for grouping sets.
@@ -32,17 +36,17 @@ import java.util.List;
  */
 public class RepeatNode extends PlanNode {
 
-    private List<BitSet> repeatIdList;
+    private List<Set<Integer>> repeatSlotIdList;
     private TupleDescriptor outputTupleDesc;
-    private int slotId;
+    private List<Long> repeatIdValueList;
 
-    public RepeatNode(PlanNodeId id, PlanNode input, List<BitSet> repeatIdList, TupleDescriptor outputTupleDesc, int slotId) {
+    public RepeatNode(PlanNodeId id, PlanNode input, List<Set<SlotId>> repeatSlotIdList, TupleDescriptor outputTupleDesc, List<Long> repeatIdValueList) {
         super(id, input.getTupleIds(), "REPEATNODE");
         this.children.add(input);
-        this.repeatIdList = repeatIdList;
+        this.repeatSlotIdList = buildIdSetList(repeatSlotIdList);
         this.outputTupleDesc = outputTupleDesc;
-        this.slotId = slotId;
-        tupleIds.add(this.outputTupleDesc.getId());
+        this.repeatIdValueList = repeatIdValueList;
+        tupleIds.add(outputTupleDesc.getId());
     }
 
     @Override
@@ -63,13 +67,12 @@ public class RepeatNode extends PlanNode {
     @Override
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.REPEAT_NODE;
-        List<List<Boolean>> repeatIds = convertToBooleanList(repeatIdList);
-        msg.repeat_node = new TRepeatNode(outputTupleDesc.getId().asInt(), repeatIds, slotId);
+        msg.repeat_node = new TRepeatNode(outputTupleDesc.getId().asInt(), repeatSlotIdList, repeatIdValueList);
     }
 
     @Override
     protected String debugString() {
-        return Objects.toStringHelper(this).add("Repeat", repeatIdList.size()).addValue(
+        return Objects.toStringHelper(this).add("Repeat", repeatSlotIdList.size()).addValue(
                 super.debugString()).toString();
     }
 
@@ -77,7 +80,7 @@ public class RepeatNode extends PlanNode {
     protected String getNodeExplainString(String detailPrefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
         output.append(detailPrefix + "repeat: new add ");
-        output.append(repeatIdList.size());
+        output.append(repeatSlotIdList.size());
         output.append(" lines and 1 column\n");
         return output.toString();
     }
@@ -109,5 +112,25 @@ public class RepeatNode extends PlanNode {
             groupingIdList.add(l);
         }
         return groupingIdList;
+    }
+
+    public static long convert(BitSet bits) {
+        long value = 0L;
+        for (int i = 0; i < bits.length(); ++i) {
+            value += bits.get(i) ? (1L << i) : 0L;
+        }
+        return value;
+    }
+
+    private static List<Set<Integer>> buildIdSetList(List<Set<SlotId>> repeatSlotIdList) {
+        List<Set<Integer>> slotIdList = new ArrayList<>();
+        for(Set slotSet : repeatSlotIdList) {
+            Set<Integer> intSet = new HashSet<>();
+            for(Object slotId : slotSet) {
+                intSet.add(((SlotId)slotId).asInt());
+            }
+            slotIdList.add(intSet);
+        }
+        return slotIdList;
     }
 }
