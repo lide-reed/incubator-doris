@@ -262,8 +262,8 @@ public class GroupByClause implements ParseNode {
     private void addGroupingId(Analyzer analyzer) throws  AnalysisException {
         TupleDescriptor tupleDesc = analyzer.getDescTbl().createTupleDescriptor(GROUPING__ID);
         groupingIdSlotRef = new VirtualSlotRef(GROUPING__ID, Type.BIGINT, tupleDesc);
+        groupingIdSlotRef.analyze(analyzer);
         groupingExprs.add(groupingIdSlotRef);
-
     }
 
     private void buildGroupingClause(Analyzer analyzer) throws AnalysisException {
