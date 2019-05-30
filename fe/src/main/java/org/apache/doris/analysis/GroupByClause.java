@@ -269,7 +269,7 @@ public class GroupByClause implements ParseNode {
     private void buildGroupingClause(Analyzer analyzer) throws AnalysisException {
         groupingIdList = new ArrayList<>();
         BitSet bitSetAll = new BitSet();
-        bitSetAll.set(0, groupingExprs.size() - 1, true);
+        bitSetAll.set(0, groupingExprs.size(), true);
         switch (groupingType) {
             case CUBE:
                 int size = (1 << groupingExprs.size()) - 1;
