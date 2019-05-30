@@ -350,8 +350,8 @@ struct TAggregationNode {
 
 struct TRepeatNode {
   1: required Types.TTupleId output_tuple_id
-  2: required list<list<bool>> repeat_id_list
-  3: required i32 new_slot_id
+  2: required list<set<Types.TSlotId>> slot_id_set_list
+  3: required list<i64> repeat_id_list
 }
 
 struct TPreAggregationNode {

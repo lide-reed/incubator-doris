@@ -28,13 +28,13 @@ namespace doris {
 RepeatNode::RepeatNode(ObjectPool* pool, const TPlanNode& tnode,
                      const DescriptorTbl& descs)
     : ExecNode(pool, tnode, descs),
+    _slot_id_set_list(tnode.repeat_node.slot_id_set_list),
     _repeat_id_list(tnode.repeat_node.repeat_id_list),
-    _tuple_id(tnode.repeat_node.output_tuple_id),
-    _new_slot_id(tnode.repeat_node.new_slot_id),
+    _output_tuple_id(tnode.repeat_node.output_tuple_id),
     _tuple_desc(nullptr),
     _child_row_batch(nullptr),
     _child_eos(false),
-    _repeat_id_idx(-1),
+    _repeat_id_idx(0),
     _runtime_state(nullptr) {
 }
 
@@ -46,16 +46,10 @@ Status RepeatNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
 
     _runtime_state = state;
-    _tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
+    _tuple_desc = state->desc_tbl().get_tuple_descriptor(_output_tuple_id);
     if (_tuple_desc == NULL) {
         return Status("Failed to get tuple descriptor.");
     }
-
-    _new_slot_desc = state->desc_tbl().get_slot_descriptor(_new_slot_id);
-    if (_new_slot_desc == NULL) {
-        return Status("Failed to get new slot descriptor.");
-    }
-    DCHECK(_new_slot_desc->col_name() == "GROUPING__ID");
 
     return Status::OK;
 }
@@ -68,92 +62,108 @@ Status RepeatNode::open(RuntimeState* state) {
     return Status::OK;
 }
 
-int RepeatNode::conver_to_int(int repeat_id_idx) {
-    int result = 0;
-    int size = _tuple_desc->slots().size();
-    if (repeat_id_idx < 0) {
-        for(int i = 0; i < size; i++) {
-            result += (1 << i);
-        }
-        return result;
-    }
-
-    std::vector<bool> repeat_ids = _repeat_id_list[repeat_id_idx];
-    DCHECK_EQ(size, repeat_ids.size());
-    for(int i = 0; i < repeat_ids.size(); i++) {
-        result += repeat_ids[i] ? (1 << i) : 0;
-    }
-    return result;
-}
-
 Status RepeatNode::get_repeated_batch(
             RowBatch* child_row_batch, int repeat_id_idx, RowBatch* row_batch) {
 
-    DCHECK(repeat_id_idx >= -1);
-    DCHECK(repeat_id_idx < (int)_repeat_id_list.size());
+    DCHECK(repeat_id_idx >= 0);
+    DCHECK(repeat_id_idx <= (int)_repeat_id_list.size());
     DCHECK(child_row_batch != nullptr);
     DCHECK_EQ(row_batch->num_rows(), 0);
 
-    LOG(INFO) << "###################\n";
-    LOG(INFO) << child_row_batch->to_string();
-    LOG(INFO) << "-------------------\n";
+    //LOG(INFO) << "0. ################### child_row_batch\n";
+    //LOG(INFO) << child_row_batch->to_string();
+    //LOG(INFO) << "-------------------\n";
 
+    // fill others slots
     MemPool* tuple_pool = row_batch->tuple_data_pool();
-    int tuple_buffer_size = row_batch->capacity() * _tuple_desc->byte_size();
-    void* tuple_buffer = tuple_pool->allocate(tuple_buffer_size);
+    const vector<TupleDescriptor*>& src_tuple_descs = child_row_batch->row_desc().tuple_descriptors();
+    const vector<TupleDescriptor*>& dst_tuple_descs = row_batch->row_desc().tuple_descriptors();
+    DCHECK_EQ(src_tuple_descs.size() + 1, dst_tuple_descs.size());
+    Tuple* dst_tuple = nullptr;
+    for (int i = 0; i < child_row_batch->num_rows(); ++i) {
+        int row_idx = row_batch->add_row();
+        TupleRow* dst_row = row_batch->get_row(row_idx);
+        TupleRow* child_row = child_row_batch->get_row(i);
+
+        vector<TupleDescriptor*>::const_iterator src_it = src_tuple_descs.begin();
+        vector<TupleDescriptor*>::const_iterator dst_it = dst_tuple_descs.begin();
+        for (int j = 0; src_it != src_tuple_descs.end() && dst_it != dst_tuple_descs.end(); 
+                    ++src_it, ++dst_it, ++j) {
+            Tuple* src_tuple = child_row->get_tuple(j);
+            if (src_tuple == NULL) {
+                continue;
+            }
+
+            if (dst_tuple == nullptr) {
+                int size = row_batch->capacity() * (*dst_it)->byte_size();
+                void* tuple_buffer = tuple_pool->allocate(size);
+                if (tuple_buffer == nullptr) {
+                    return Status("Allocate memory for row batch failed.");
+                }
+                dst_tuple = reinterpret_cast<Tuple*>(tuple_buffer);
+            }
+            dst_row->set_tuple(j, dst_tuple);
+            memset(dst_tuple, 0, (*dst_it)->num_null_bytes());
+
+            for (int k = 0; k < (*src_it)->slots().size(); k++) {
+                SlotDescriptor* src_slot_desc = (*src_it)->slots()[k];
+                SlotDescriptor* dst_slot_desc = (*dst_it)->slots()[k];
+                DCHECK_EQ(src_slot_desc->type().type, dst_slot_desc->type().type);
+                bool src_slot_null = src_tuple->is_null(src_slot_desc->null_indicator_offset());
+                void* src_slot = NULL;
+                if (!src_slot_null) src_slot = src_tuple->get_slot(src_slot_desc->tuple_offset());
+                RawValue::write(src_slot, dst_tuple, dst_slot_desc, tuple_pool);
+                if (_slot_id_set_list[0].find(src_slot_desc->id()) != _slot_id_set_list[0].end()) {
+                    std::set<SlotId> repeat_ids = _slot_id_set_list[repeat_id_idx];
+                    if (repeat_ids.find(src_slot_desc->id()) == repeat_ids.end()) {
+                        dst_tuple->set_null(dst_slot_desc->null_indicator_offset());
+                    }
+                }
+            }
+            row_batch->commit_last_row();
+            char* new_tuple = reinterpret_cast<char*>(dst_tuple);
+            new_tuple += (*dst_it)->byte_size();
+            dst_tuple = reinterpret_cast<Tuple*>(new_tuple);
+        }
+    }
+
+    //LOG(INFO) << "1. ################### row_batch\n";
+    //LOG(INFO) << row_batch->to_string();
+    //LOG(INFO) << "-------------------\n";
+    //++_num_rows_returned;
+    //COUNTER_SET(_rows_returned_counter, _num_rows_returned);
+
+    // fill grouping ID to tuple
+    int size = row_batch->capacity() * _tuple_desc->byte_size();
+    void* tuple_buffer = tuple_pool->allocate(size);
     if (tuple_buffer == nullptr) {
         return Status("Allocate memory for row batch failed.");
     }
     Tuple* tuple = reinterpret_cast<Tuple*>(tuple_buffer);
+    int64_t groupingId = _repeat_id_list[repeat_id_idx];
+    LOG(INFO) << "## groupingId=" << groupingId << " (" << repeat_id_idx << ")";
     for (int i = 0; i < child_row_batch->num_rows(); ++i) {
-        int row_idx = row_batch->add_row();
+        int row_idx = i; 
         TupleRow* row = row_batch->get_row(row_idx);
-        row->set_tuple(0, tuple);
+        row->set_tuple(1, tuple);
         memset(tuple, 0, _tuple_desc->num_null_bytes());
 
         // GROUPING__ID located in index 0
         const SlotDescriptor* slot_desc = _tuple_desc->slots()[0];
-        if (slot_desc->id() == _new_slot_id) {
-            DCHECK(slot_desc->col_name() == "GROUPING__ID");
-            int* groupingId = reinterpret_cast<int*>(tuple->get_slot(slot_desc->tuple_offset()));
-            if (groupingId != NULL) {
-                *groupingId = conver_to_int(repeat_id_idx);
-            }
-        }
+        DCHECK(slot_desc->col_name() == "GROUPING__ID");
+        tuple->set_not_null(slot_desc->null_indicator_offset());
+        RawValue::write(&groupingId, tuple, slot_desc, tuple_pool);
 
-        const vector<TupleDescriptor*>& tuple_descs = child_row_batch->row_desc().tuple_descriptors();
-        DCHECK(tuple_descs.size() > 0);
-        TupleDescriptor *child_desc = tuple_descs[0];
-        TupleRow* child_row = child_row_batch->get_row(i);
-        Tuple* src_tuple = child_row->get_tuple(0);
-        DCHECK_EQ(child_desc->slots().size(), _tuple_desc->slots().size() - 1);
-        for (int j = 1; j < _tuple_desc->slots().size(); j++) {
-            SlotDescriptor* src_slot_desc = child_desc->slots()[j - 1];
-            SlotDescriptor* dst_slot_desc = _tuple_desc->slots()[j];
-            bool src_slot_null = src_tuple->is_null(src_slot_desc->null_indicator_offset());
-            void* src_slot = NULL;
-            if (!src_slot_null) src_slot = src_tuple->get_slot(src_slot_desc->tuple_offset());
-            RawValue::write(src_slot, tuple, dst_slot_desc, tuple_pool);
-            if (repeat_id_idx >= 0) {
-                std::vector<bool> repeat_ids = _repeat_id_list[repeat_id_idx];
-                DCHECK(repeat_ids.size() == _tuple_desc->slots().size());
-                if (!repeat_ids[j]) {
-                    tuple->set_null(slot_desc->null_indicator_offset());
-                }
-            }
-        }
-
-        row_batch->commit_last_row();
+        //row_batch->commit_last_row();
         char* new_tuple = reinterpret_cast<char*>(tuple);
         new_tuple += _tuple_desc->byte_size();
         tuple = reinterpret_cast<Tuple*>(new_tuple);
     }
 
-    LOG(INFO) << "################### row_batch\n";
+    //LOG(INFO) << "2. ################### row_batch \n";
     LOG(INFO) << row_batch->to_string();
     LOG(INFO) << "-------------------\n";
-    //++_num_rows_returned;
-    //COUNTER_SET(_rows_returned_counter, _num_rows_returned);
+
 
     return Status::OK;
 }
@@ -171,6 +181,7 @@ Status RepeatNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos)
         RETURN_IF_ERROR(child(0)->get_next(state, _child_row_batch.get(), &_child_eos));
         if (_child_eos || _child_row_batch.get() == nullptr) {
             *eos = true;
+            _child_row_batch.reset(nullptr);
             return Status::OK;
         }
     }
@@ -182,7 +193,7 @@ Status RepeatNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos)
     int size = _repeat_id_list.size();
     if (_repeat_id_idx >= size) {
         _child_row_batch.reset(nullptr);
-        _repeat_id_idx = -1;
+        _repeat_id_idx = 0;
     }
 
     return Status::OK;
