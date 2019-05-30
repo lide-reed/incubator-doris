@@ -268,9 +268,12 @@ public class GroupByClause implements ParseNode {
 
     private void buildGroupingClause(Analyzer analyzer) throws AnalysisException {
         groupingIdList = new ArrayList<>();
+        BitSet bitSetAll = new BitSet();
+        bitSetAll.set(0, groupingExprs.size() - 1, true);
         switch (groupingType) {
             case CUBE:
                 int size = (1 << groupingExprs.size()) - 1;
+                groupingIdList.add(bitSetAll);
                 for(int i = 0; i < size; i++) {
                     String s = Integer.toBinaryString(i);
                     BitSet bitSet = new BitSet();
@@ -282,6 +285,7 @@ public class GroupByClause implements ParseNode {
                 break;
 
             case ROLLUP:
+                groupingIdList.add(bitSetAll);
                 for(int i = 0; i < groupingExprs.size(); i++) {
                     BitSet bitSet = new BitSet();
                     bitSet.set(0, i);
@@ -290,9 +294,10 @@ public class GroupByClause implements ParseNode {
                 break;
 
             case GROUPING_SETS:
+                groupingIdList.add(bitSetAll);
+
                 BitSet bitSetBase = new BitSet();
                 bitSetBase.set(0, groupingExprs.size());
-
                 for(ArrayList<Expr> list: groupingSetList) {
                     BitSet bitSet = new BitSet();
                     for(int i = 0; i < groupingExprs.size(); i++) {

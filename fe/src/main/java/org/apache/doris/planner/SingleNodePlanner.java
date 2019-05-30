@@ -690,7 +690,6 @@ public class SingleNodePlanner {
         List<Long> groupingIdValueList = new ArrayList<>();
         List<Expr> exprList = groupByClause.getGroupingExprs();
         Preconditions.checkState(exprList.size() >= 2);
-        groupingIdValueList.add((1L << (exprList.size() - 1)) - 1);
         for(BitSet bitSet : groupByClause.getGroupingIdList()) {
             Set<SlotId> slotIdSet = new HashSet<>();
             for(SlotDescriptor slotDesc : slotDescSet) {
