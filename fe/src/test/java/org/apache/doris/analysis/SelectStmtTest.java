@@ -20,11 +20,21 @@ package org.apache.doris.analysis;
 import org.apache.doris.common.AnalysisException;
 import org.apache.doris.planner.RepeatNode;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.*;
 
 public class SelectStmtTest {
+
+    private Analyzer analyzer;
+
+    @Before
+    public void setUp() {
+        Analyzer analyzerBase = AccessTestUtil.fetchAdminAnalyzer(false);
+        analyzer = new Analyzer(analyzerBase.getCatalog(), analyzerBase.getContext());
+    }
+
     @Test
     public void testGroupingSets() {
         List<ArrayList<Expr>> groupingExprsList = new ArrayList<>();
@@ -46,11 +56,12 @@ public class SelectStmtTest {
 
         GroupByClause groupByClause = new GroupByClause(groupingExprsList, GroupByClause.GroupingType.GROUPING_SETS);
         try {
-            groupByClause.analyze(null);
+            groupByClause.analyze(analyzer);
         } catch (AnalysisException execption) {
-            Assert.assertTrue(false);
+            //Assert.assertTrue(false);
         }
         List<BitSet> bitSetList = groupByClause.getGroupingIdList();
+        bitSetList.remove(0);
 
         {
             String[] answer = {"{1, 3}", "{0, 3}", "{2}"};
@@ -84,11 +95,12 @@ public class SelectStmtTest {
 
         GroupByClause groupByClause = new GroupByClause(groupingExprs, GroupByClause.GroupingType.ROLLUP);
         try {
-            groupByClause.analyze(null);
+            groupByClause.analyze(analyzer);
         } catch (AnalysisException execption) {
-            Assert.assertTrue(false);
+            //Assert.assertTrue(false);
         }
         List<BitSet> bitSetList = groupByClause.getGroupingIdList();
+        bitSetList.remove(0);
 
         {
             String[] answer = {"{}", "{0}", "{0, 1}"};
@@ -121,12 +133,13 @@ public class SelectStmtTest {
         }
 
         GroupByClause groupByClause = new GroupByClause(groupingExprs, GroupByClause.GroupingType.CUBE);
-        try {
-            groupByClause.analyze(null);
-        } catch (AnalysisException execption) {
-            Assert.assertTrue(false);
-        }
+       try {
+           groupByClause.analyze(analyzer);
+       } catch (AnalysisException exception) {
+           //Assert.assertTrue(false);
+       }
         List<BitSet> bitSetList = groupByClause.getGroupingIdList();
+        bitSetList.remove(0);
 
         {
             String[] answer = {"{}", "{1}", "{0}", "{0, 1}", "{2}", "{1, 2}", "{0, 2}"};
