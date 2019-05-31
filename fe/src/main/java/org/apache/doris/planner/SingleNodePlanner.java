@@ -721,7 +721,6 @@ public class SingleNodePlanner {
         // add Having clause
         root.assignConjuncts(analyzer);
         Preconditions.checkState(selectStmt.getAggInfo() != null);
-
         // add aggregation, if required
         AggregateInfo aggInfo = selectStmt.getAggInfo();
         PlanNode newRoot = new AggregationNode(ctx_.getNextNodeId(), root, aggInfo);

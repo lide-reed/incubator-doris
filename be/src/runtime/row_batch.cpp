@@ -674,19 +674,4 @@ std::string RowBatch::to_string() {
     return out.str();
 }
 
-void RowBatch::deep_copy_to(RowBatch* dst) {
-  //DCHECK(dst->_row_desc->equals(*_row_desc));
-  DCHECK_EQ(dst->_num_rows, 0);
-  DCHECK_GE(dst->_capacity, _num_rows);
-  dst->add_rows(_num_rows);
-  for (int i = 0; i < _num_rows; ++i) {
-    TupleRow* src_row = get_row(i);
-    TupleRow* dst_row = reinterpret_cast<TupleRow*>(dst->_tuple_ptrs +
-        i * _num_tuples_per_row);
-    src_row->deep_copy(
-        dst_row, _row_desc.tuple_descriptors(), (&dst->_tuple_data_pool)->get(), false);
-  }
-  dst->commit_rows(_num_rows);
-}
-
 } // end namespace doris

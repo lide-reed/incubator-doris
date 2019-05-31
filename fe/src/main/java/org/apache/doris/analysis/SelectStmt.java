@@ -374,7 +374,6 @@ public class SelectStmt extends QueryStmt {
         }
 
         createSortInfo(analyzer);
-
         analyzeAggregation(analyzer);
         createAnalyticInfo(analyzer);
         if (evaluateOrderBy) {

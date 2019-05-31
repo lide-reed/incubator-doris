@@ -202,13 +202,13 @@ Status AggregationNode::open(RuntimeState* state) {
         RETURN_IF_ERROR(state->check_query_state());
         RETURN_IF_ERROR(_children[0]->get_next(state, &batch, &eos));
         // SCOPED_TIMER(_build_timer);
-        //if (VLOG_ROW_IS_ON) {
+        if (VLOG_ROW_IS_ON) {
             for (int i = 0; i < batch.num_rows(); ++i) {
                 TupleRow* row = batch.get_row(i);
-                LOG(INFO) << "id=" << id() << " input row: "
+                VLOG_ROW << "id=" << id() << " input row: "
                         << row->to_string(_children[0]->row_desc());
             }
-        //}
+        }
 
         int64_t agg_rows_before = _hash_tbl->size();
 

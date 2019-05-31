@@ -207,12 +207,11 @@ void RawValue::print_value(const void* value, const TypeDescriptor& type, int sc
     case TYPE_HLL: {
         string_val = reinterpret_cast<const StringValue*>(value);
         std::stringstream ss;
-        //ss << "ptr:" << (void*)string_val->ptr << " len" << string_val->len;
-        //ss << "ptr:" << (char*)string_val->ptr << ",len:" << string_val->len;
-        //tmp = ss.str();
+        ss << "ptr:" << (void*)string_val->ptr << " len" << string_val->len;
+        tmp = ss.str();
         //tmp.assign(static_cast<char*>(string_val->ptr), string_val->len);
-        out << "ptr:" << (char*)string_val->ptr << ",len:" << string_val->len;
-        break;
+        str->swap(tmp);
+        return;
     }
 
     default:
