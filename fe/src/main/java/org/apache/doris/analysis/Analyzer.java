@@ -594,7 +594,8 @@ public class Analyzer {
             return result;
         }
 
-        result = new SlotDescriptor(SlotId.createGenerator().getNextId(), tupleDescriptor);
+        result = addSlotDescriptor(tupleDescriptor);
+        //result = new SlotDescriptor(SlotId.createGenerator().getNextId(), tupleDescriptor);
         Column col = new Column(colName, type);
         result.setColumn(col);
         result.setIsNullable(true);
