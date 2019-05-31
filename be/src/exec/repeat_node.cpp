@@ -64,15 +64,10 @@ Status RepeatNode::open(RuntimeState* state) {
 
 Status RepeatNode::get_repeated_batch(
             RowBatch* child_row_batch, int repeat_id_idx, RowBatch* row_batch) {
-
     DCHECK(repeat_id_idx >= 0);
     DCHECK(repeat_id_idx <= (int)_repeat_id_list.size());
     DCHECK(child_row_batch != nullptr);
     DCHECK_EQ(row_batch->num_rows(), 0);
-
-    //LOG(INFO) << "0. ################### child_row_batch\n";
-    //LOG(INFO) << child_row_batch->to_string();
-    //LOG(INFO) << "-------------------\n";
 
     // fill others slots
     MemPool* tuple_pool = row_batch->tuple_data_pool();
@@ -127,12 +122,6 @@ Status RepeatNode::get_repeated_batch(
         }
     }
 
-    //LOG(INFO) << "1. ################### row_batch\n";
-    //LOG(INFO) << row_batch->to_string();
-    //LOG(INFO) << "-------------------\n";
-    //++_num_rows_returned;
-    //COUNTER_SET(_rows_returned_counter, _num_rows_returned);
-
     // fill grouping ID to tuple
     int size = row_batch->capacity() * _tuple_desc->byte_size();
     void* tuple_buffer = tuple_pool->allocate(size);
@@ -141,7 +130,6 @@ Status RepeatNode::get_repeated_batch(
     }
     Tuple* tuple = reinterpret_cast<Tuple*>(tuple_buffer);
     int64_t groupingId = _repeat_id_list[repeat_id_idx];
-    LOG(INFO) << "## groupingId=" << groupingId << " (" << repeat_id_idx << ")";
     for (int i = 0; i < child_row_batch->num_rows(); ++i) {
         int row_idx = i; 
         TupleRow* row = row_batch->get_row(row_idx);
@@ -150,7 +138,6 @@ Status RepeatNode::get_repeated_batch(
 
         // GROUPING__ID located in index 0
         const SlotDescriptor* slot_desc = _tuple_desc->slots()[0];
-        DCHECK(slot_desc->col_name() == "GROUPING__ID");
         tuple->set_not_null(slot_desc->null_indicator_offset());
         RawValue::write(&groupingId, tuple, slot_desc, tuple_pool);
 
@@ -159,11 +146,6 @@ Status RepeatNode::get_repeated_batch(
         new_tuple += _tuple_desc->byte_size();
         tuple = reinterpret_cast<Tuple*>(new_tuple);
     }
-
-    //LOG(INFO) << "2. ################### row_batch \n";
-    LOG(INFO) << row_batch->to_string();
-    LOG(INFO) << "-------------------\n";
-
 
     return Status::OK;
 }
