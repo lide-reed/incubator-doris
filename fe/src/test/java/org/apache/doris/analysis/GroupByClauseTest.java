@@ -25,7 +25,7 @@ import org.junit.Test;
 
 import java.util.*;
 
-public class SelectStmtTest {
+public class GroupByClauseTest {
 
     private Analyzer analyzer;
 
