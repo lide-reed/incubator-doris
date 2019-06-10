@@ -799,6 +799,19 @@ public class SelectStmt extends QueryStmt {
             throw new AnalysisException("cannot combine SELECT DISTINCT with aggregate functions or GROUP BY");
         }
 
+        // disallow '*' and explicit GROUP BY (we can't group by '*', and if you need to
+        // name all star-expanded cols in the group by clause you might as well do it
+        // in the select list)
+        if (groupByClause != null ||
+                TreeNode.contains(resultExprs, Expr.isAggregatePredicate())) {
+            for (SelectListItem item : selectList.getItems()) {
+                if (item.isStar()) {
+                    throw new AnalysisException(
+                      "cannot combine '*' in select list with GROUP BY: " + item.toSql());
+                }
+            }
+        }
+
         // Collect the aggregate expressions from the SELECT, HAVING and ORDER BY clauses
         // of this statement.
         ArrayList<FunctionCallExpr> aggExprs = Lists.newArrayList();
