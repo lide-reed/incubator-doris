@@ -25,6 +25,7 @@ class Tuple;
 class RuntimeState;
 class RowBatch;
 
+// repeat tuple of children and set given slots to null
 class RepeatNode : public ExecNode {
 public:
     RepeatNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
