@@ -79,9 +79,9 @@ public class RepeatNode extends PlanNode {
     @Override
     protected String getNodeExplainString(String detailPrefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
-        output.append(detailPrefix + "repeat: new add ");
-        output.append(repeatSlotIdList.size());
-        output.append(" lines and 1 column\n");
+        output.append(detailPrefix + "repeat: repeat ");
+        output.append(repeatSlotIdList.size() - 1);
+        output.append(" lines and new add 1 column\n");
         return output.toString();
     }
 
